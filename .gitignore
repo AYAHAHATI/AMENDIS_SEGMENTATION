@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environment
+.venv/
+venv/
+
+# Airflow
+logs/
+airflow.db
+
+# Python cache
+.pytest_cache/
+
+# VS Code
+.vscode/
+
+# Environment variables
+.env
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Intermediate data (à adapter selon ton besoin)
+data/intermediate/*.csv
+# Gros fichiers de données
+data/raw/*.csv
+
+# Fichiers intermédiaires
+data/intermediate/
+
+# Logs
+logs/
+
+# Environnement virtuel
+.venv/
