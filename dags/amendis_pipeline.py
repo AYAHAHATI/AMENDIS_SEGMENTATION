@@ -26,14 +26,18 @@ def extract_task():
     Extraction des données.
     """
 
-    # Lire les fichiers SAMPLE au lieu des fichiers complets
     extractor = DataExtractor(data_path="data/sample")
 
+    # Historique complet : 2022-2024 + 2025
     extractor.run(
-        "HIST_CSO_SAMPLE.csv",
+        [
+            "HIST_CSO_STG22_24_SAMPLE.csv",
+            "HIST_CSO_SAMPLE.csv"
+        ],
         "hist_raw.csv"
     )
 
+    # Facturation
     extractor.run(
         "FACT_STG_SAMPLE.csv",
         "fact_raw.csv"
@@ -75,7 +79,7 @@ def aggregate_task():
 
 def merge_task():
     """
-   Fusion des données.
+    Fusion des données.
     """
 
     merger = DataMerger()

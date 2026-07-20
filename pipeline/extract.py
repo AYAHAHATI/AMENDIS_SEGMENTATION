@@ -120,22 +120,43 @@ class DataExtractor:
         print("\nAperçu :")
         print(df.head())
 
-    def run(self, input_file, output_file):
+    def run(self, input_files, output_file):
 
         print("=" * 60)
-        print(f"TRAITEMENT : {input_file}")
+        print("EXTRACTION DES DONNÉES")
         print("=" * 60)
 
-        df = self.read_csv(input_file)
+        # Si plusieurs fichiers sont fournis
+        if isinstance(input_files, list):
 
-        print("Lecture terminée.")
+            dataframes = []
 
-        self.show_info(df)
+            for file in input_files:
 
-        print("Informations affichées.")
+                print(f"\nLecture : {file}")
 
-        self.save_dataframe(df, output_file)
+                df = self.read_csv(file)
 
-        print("Sauvegarde terminée.")
+                self.show_info(df)
 
-        return df
+                dataframes.append(df)
+
+            print("\nConcaténation des fichiers...")
+
+            df_final = pd.concat(dataframes, ignore_index=True)
+
+            print(f"Nombre total de lignes : {len(df_final)}")
+
+        else:
+
+            print(f"\nLecture : {input_files}")
+
+            df_final = self.read_csv(input_files)
+
+            self.show_info(df_final)
+
+        self.save_dataframe(df_final, output_file)
+
+        print("Extraction terminée.")
+
+        return df_final
