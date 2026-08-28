@@ -40,3 +40,11 @@ logs/
 
 # Environnement virtuel
 .venv/
+# Donnees reelles Amendis
+data/raw/
+data/intermediate/
+data/final/
+
+# Modeles entraines
+models/
+*.joblib

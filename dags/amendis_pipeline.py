@@ -1,7 +1,15 @@
 """
 amendis_pipeline.py
 
-Orchestration du pipeline ETL Amendis avec Apache Airflow.
+Orchestration Airflow du pipeline de segmentation
+des clients Amendis.
+
+Le modèle Machine Learning est entraîné sur les
+données historiques 2022-2025.
+
+Les données 2026 sont utilisées comme données de test :
+elles sont extraites, transformées, agrégées,
+préparées puis classifiées avec le modèle historique.
 """
 
 from datetime import datetime
@@ -9,112 +17,241 @@ from datetime import datetime
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from pipeline.extract import DataExtractor
-from pipeline.transform import DataTransformer
-from pipeline.aggregate import DataAggregator
-from pipeline.merge import DataMerger
-from pipeline.feature_engineering import FeatureEngineer
-from pipeline.scaler import DataScaler
+
+# ==========================================================
+# ÉTAPE 1 : EXTRACTION 2026
+# ==========================================================
+
+def extract_2026_task():
+
+    print("=" * 70)
+    print("AIRFLOW - EXTRACTION 2026")
+    print("=" * 70)
+
+    from pipeline.extract import DataExtractor
+
+    extractor = DataExtractor()
+
+    df = extractor.read_txt_2026(
+        "HIST_CSO_STG2026.txt"
+    )
+
+    extractor.save_dataframe(
+        df,
+        "hist_2026_extracted.csv"
+    )
+
+    print("Extraction 2026 terminée.")
 
 
 # ==========================================================
-# TÂCHES DU PIPELINE
+# ÉTAPE 2 : TRANSFORMATION 2026
 # ==========================================================
 
-def extract_task():
-    """
-    Extraction des données.
-    """
+def transform_2026_task():
 
-    extractor = DataExtractor(data_path="data/sample")
+    print("=" * 70)
+    print("AIRFLOW - TRANSFORMATION 2026")
+    print("=" * 70)
 
-    # Historique complet : 2022-2024 + 2025
-    extractor.run(
-        [
-            "HIST_CSO_STG22_24_SAMPLE.csv",
-            "HIST_CSO_SAMPLE.csv"
-        ],
-        "hist_raw.csv"
-    )
-
-    # Facturation
-    extractor.run(
-        "FACT_STG_SAMPLE.csv",
-        "fact_raw.csv"
-    )
-
-
-def transform_task():
-    """
-    Transformation des données.
-    """
+    from pipeline.transform import DataTransformer
 
     transformer = DataTransformer()
 
     transformer.run(
-        "hist_raw.csv",
-        "hist_clean.csv"
+        "hist_2026_extracted.csv",
+        "hist_2026_clean.csv"
     )
 
-    transformer.run(
-        "fact_raw.csv",
-        "fact_clean.csv"
+    print("Transformation 2026 terminée.")
+
+
+# ==========================================================
+# ÉTAPE 3 : AGRÉGATION 2026
+# ==========================================================
+
+def aggregate_2026_task():
+
+    print("=" * 70)
+    print("AIRFLOW - AGRÉGATION 2026")
+    print("=" * 70)
+
+    import pandas as pd
+
+    from pipeline.aggregate import DataAggregator
+
+    # ------------------------------------------------------
+    # Chargement du fichier transformé
+    # ------------------------------------------------------
+
+    input_path = (
+        "/opt/airflow/data/intermediate/"
+        "hist_2026_clean.csv"
     )
 
+    print(
+        f"Lecture du fichier : {input_path}"
+    )
 
-def aggregate_task():
-    """
-    Agrégation des données.
-    """
+    if not pd.io.common.file_exists(input_path):
+
+        raise FileNotFoundError(
+            f"Fichier introuvable : {input_path}"
+        )
+
+    df = pd.read_csv(
+        input_path
+    )
+
+    print(
+        f"Nombre de lignes avant agrégation : "
+        f"{len(df)}"
+    )
+
+    print(
+        f"Nombre de colonnes : "
+        f"{len(df.columns)}"
+    )
+
+    print(
+        f"Colonnes disponibles : "
+        f"{list(df.columns)}"
+    )
+
+    # ------------------------------------------------------
+    # Vérification de la clé client
+    # ------------------------------------------------------
+
+    if "NUM_CTA_HASH" not in df.columns:
+
+        raise ValueError(
+            "La colonne NUM_CTA_HASH est absente "
+            "du fichier hist_2026_clean.csv."
+        )
+
+    # ------------------------------------------------------
+    # Agrégation
+    # ------------------------------------------------------
 
     aggregator = DataAggregator()
 
-    aggregator.run(
-        "hist_clean.csv",
-        "fact_clean.csv",
-        "hist_client.csv",
-        "fact_client.csv"
+    df_aggregated = aggregator.aggregate_consumption(
+        df
     )
 
+    # ------------------------------------------------------
+    # Sauvegarde
+    # ------------------------------------------------------
 
-def merge_task():
-    """
-    Fusion des données.
-    """
-
-    merger = DataMerger()
-
-    merger.run(
-        "hist_client.csv",
-        "fact_client.csv",
-        "dataset_final.csv"
+    aggregator.save_dataframe(
+        df_aggregated,
+        "hist_2026_client.csv"
     )
 
+    print(
+        f"Nombre de lignes après agrégation : "
+        f"{len(df_aggregated)}"
+    )
 
-def feature_task():
-    """
-    Feature Engineering.
-    """
+    print(
+        f"Colonnes après agrégation : "
+        f"{list(df_aggregated.columns)}"
+    )
+
+    print("Agrégation 2026 terminée.")
+
+
+# ==========================================================
+# ÉTAPE 4 : FEATURE ENGINEERING 2026
+# ==========================================================
+
+def feature_engineering_2026_task():
+
+    print("=" * 70)
+    print("AIRFLOW - FEATURE ENGINEERING 2026")
+    print("=" * 70)
+
+    from pipeline.feature_engineering import FeatureEngineer
 
     engineer = FeatureEngineer()
 
     engineer.run(
-        "dataset_final.csv",
-        "features.csv"
+        "hist_2026_client.csv",
+        "features_2026.csv"
     )
 
+    print("Feature Engineering 2026 terminé.")
 
-def scaler_task():
-    """
-    Standardisation des données.
-    """
+
+# ==========================================================
+# ÉTAPE 5 : STANDARDISATION 2026
+# ==========================================================
+
+def scaler_2026_task():
+
+    print("=" * 70)
+    print("AIRFLOW - STANDARDISATION 2026")
+    print("=" * 70)
+
+    from pipeline.scaler import DataScaler
 
     scaler = DataScaler()
 
-    scaler.run(
-        "features.csv",
-        "scaled_features.csv"
+    # ------------------------------------------------------
+    # IMPORTANT :
+    # run_test utilise le scaler déjà entraîné
+    # sur les données historiques 2022-2025.
+    # ------------------------------------------------------
+
+    scaler.run_test(
+        "features_2026.csv",
+        "scaled_features_2026.csv"
     )
+
+    print("Standardisation 2026 terminée.")
+
+
+# ==========================================================
+# ÉTAPE 6 : PRÉDICTION K-MEANS 2026
+# ==========================================================
+
+def predict_2026_task():
+
+    print("=" * 70)
+    print("AIRFLOW - PRÉDICTION K-MEANS 2026")
+    print("=" * 70)
+
+    from ml.predict_kmeans import predict_kmeans_2026
+
+    df = predict_kmeans_2026()
+
+    print(
+        f"Nombre de clients segmentés : {len(df)}"
+    )
+
+    print("Prédiction 2026 terminée.")
+
+
+# ==========================================================
+# ÉTAPE 7 : DATASET FINAL 2026
+# ==========================================================
+
+def create_final_2026_task():
+
+    print("=" * 70)
+    print("AIRFLOW - CRÉATION DU DATASET FINAL 2026")
+    print("=" * 70)
+
+    from ml.create_final_dataset import create_final_dataset
+
+    df = create_final_dataset()
+
+    print(
+        f"Nombre de clients dans le dataset final : "
+        f"{len(df)}"
+    )
+
+    print("Dataset final 2026 terminé.")
 
 
 # ==========================================================
@@ -122,42 +259,108 @@ def scaler_task():
 # ==========================================================
 
 with DAG(
+
     dag_id="amendis_pipeline",
-    description="Pipeline ETL Amendis",
-    start_date=datetime(2026, 1, 1),
-    schedule="@daily",
+
+    description=(
+        "Pipeline automatique de segmentation "
+        "des clients Amendis sur les données 2026"
+    ),
+
+    start_date=datetime(
+        2026,
+        8,
+        23
+    ),
+
+    # Exécution automatique tous les jours à 02:00
+    schedule="0 2 * * *",
+
     catchup=False,
-    tags=["amendis", "etl", "machine_learning"],
+
+    tags=[
+        "amendis",
+        "etl",
+        "machine_learning",
+        "segmentation",
+        "2026"
+    ],
+
 ) as dag:
 
+    # ======================================================
+    # TASK 1 : EXTRACTION
+    # ======================================================
+
     extract = PythonOperator(
-        task_id="extract",
-        python_callable=extract_task
+        task_id="extract_2026",
+        python_callable=extract_2026_task
     )
+
+    # ======================================================
+    # TASK 2 : TRANSFORMATION
+    # ======================================================
 
     transform = PythonOperator(
-        task_id="transform",
-        python_callable=transform_task
+        task_id="transform_2026",
+        python_callable=transform_2026_task
     )
+
+    # ======================================================
+    # TASK 3 : AGRÉGATION
+    # ======================================================
 
     aggregate = PythonOperator(
-        task_id="aggregate",
-        python_callable=aggregate_task
+        task_id="aggregate_2026",
+        python_callable=aggregate_2026_task
     )
 
-    merge = PythonOperator(
-        task_id="merge",
-        python_callable=merge_task
-    )
+    # ======================================================
+    # TASK 4 : FEATURE ENGINEERING
+    # ======================================================
 
     feature_engineering = PythonOperator(
-        task_id="feature_engineering",
-        python_callable=feature_task
+        task_id="feature_engineering_2026",
+        python_callable=feature_engineering_2026_task
     )
+
+    # ======================================================
+    # TASK 5 : STANDARDISATION
+    # ======================================================
 
     scaler = PythonOperator(
-        task_id="scaler",
-        python_callable=scaler_task
+        task_id="scaler_2026",
+        python_callable=scaler_2026_task
     )
 
-    extract >> transform >> aggregate >> merge >> feature_engineering >> scaler
+    # ======================================================
+    # TASK 6 : PRÉDICTION
+    # ======================================================
+
+    prediction = PythonOperator(
+        task_id="predict_2026",
+        python_callable=predict_2026_task
+    )
+
+    # ======================================================
+    # TASK 7 : DATASET FINAL
+    # ======================================================
+
+    final_dataset = PythonOperator(
+        task_id="create_final_2026",
+        python_callable=create_final_2026_task
+    )
+
+    # ======================================================
+    # ORDRE DU PIPELINE
+    # ======================================================
+
+    (
+        extract
+        >> transform
+        >> aggregate
+        >> feature_engineering
+        >> scaler
+        >> prediction
+        >> final_dataset
+    )
