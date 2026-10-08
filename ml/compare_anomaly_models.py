@@ -28,7 +28,7 @@ from sklearn.svm import OneClassSVM
 # 1. CHARGEMENT DES DONNÉES
 # ==========================================================
 
-INPUT_FILE = "/opt/airflow/data/final/clients_segmentes.csv"
+INPUT_FILE = "data/final/clients_segmentes.csv"
 
 df = pd.read_csv(INPUT_FILE)
 
@@ -263,12 +263,12 @@ results["SCORE_ONE_CLASS_SVM"] = (
 # ==========================================================
 
 OUTPUT_COMPARISON = (
-    "/opt/airflow/data/final/"
+    "data/final/"
     "anomaly_models_comparison.csv"
 )
 
 OUTPUT_SCORES = (
-    "/opt/airflow/data/final/"
+    "data/final/"
     "anomaly_scores_historical.csv"
 )
 

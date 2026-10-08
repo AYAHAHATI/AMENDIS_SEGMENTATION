@@ -48,3 +48,5 @@ data/final/
 # Modeles entraines
 models/
 *.joblib
+# Résultats générés
+anomaly_scores_2026.csv

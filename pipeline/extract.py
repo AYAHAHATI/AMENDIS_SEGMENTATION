@@ -68,12 +68,12 @@ class DataExtractor:
                     f"\nTentative avec l'encodage : {encoding}"
                 )
 
+                # Lecture de toutes les lignes
                 df = pd.read_csv(
                     file_path,
                     sep=",",
                     encoding=encoding,
-                    low_memory=False,
-                    nrows=500000
+                    low_memory=False
                 )
 
                 print("Lecture réussie.")

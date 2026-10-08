@@ -9,7 +9,7 @@ données historiques 2022-2025.
 
 Les données 2026 sont utilisées comme données de test :
 elles sont extraites, transformées, agrégées,
-préparées puis classifiées avec le modèle historique.
+préparées puis classifiées avec les modèles historiques.
 """
 
 from datetime import datetime
@@ -255,6 +255,28 @@ def create_final_2026_task():
 
 
 # ==========================================================
+# ÉTAPE 8 : DÉTECTION DES ANOMALIES 2026
+# ==========================================================
+
+def detect_anomalies_2026_task():
+
+    print("=" * 70)
+    print("AIRFLOW - DÉTECTION DES ANOMALIES 2026")
+    print("MODÈLE : ISOLATION FOREST")
+    print("=" * 70)
+
+    from ml.predict_anomalies_2026 import predict_anomalies_2026
+
+    df = predict_anomalies_2026()
+
+    print(
+        f"Nombre de clients analysés : {len(df)}"
+    )
+
+    print("Détection des anomalies 2026 terminée.")
+
+
+# ==========================================================
 # DÉFINITION DU DAG
 # ==========================================================
 
@@ -283,6 +305,7 @@ with DAG(
         "etl",
         "machine_learning",
         "segmentation",
+        "anomalies",
         "2026"
     ],
 
@@ -334,7 +357,7 @@ with DAG(
     )
 
     # ======================================================
-    # TASK 6 : PRÉDICTION
+    # TASK 6 : PRÉDICTION K-MEANS
     # ======================================================
 
     prediction = PythonOperator(
@@ -352,6 +375,15 @@ with DAG(
     )
 
     # ======================================================
+    # TASK 8 : DÉTECTION DES ANOMALIES
+    # ======================================================
+
+    anomaly_detection = PythonOperator(
+        task_id="detect_anomalies_2026",
+        python_callable=detect_anomalies_2026_task
+    )
+
+    # ======================================================
     # ORDRE DU PIPELINE
     # ======================================================
 
@@ -363,4 +395,5 @@ with DAG(
         >> scaler
         >> prediction
         >> final_dataset
+        >> anomaly_detection
     )

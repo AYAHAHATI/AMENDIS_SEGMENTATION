@@ -25,22 +25,22 @@ from sklearn.preprocessing import StandardScaler
 # ==========================================================
 
 INPUT_FILE = (
-    "/opt/airflow/data/final/"
+    "data/final/"
     "clients_segmentes.csv"
 )
 
 OUTPUT_FILE = (
-    "/opt/airflow/data/final/"
+    "data/final/"
     "anomaly_scores_historical.csv"
 )
 
 MODEL_FILE = (
-    "/opt/airflow/data/final/"
+    "data/final/"
     "isolation_forest_model.joblib"
 )
 
 SCALER_FILE = (
-    "/opt/airflow/data/final/"
+    "data/final/"
     "isolation_forest_scaler.joblib"
 )
 
@@ -141,7 +141,7 @@ def detect_anomalies():
     print("\nEntraînement Isolation Forest...")
 
     model = IsolationForest(
-        n_estimators=100,
+        n_estimators=200,
         contamination=0.05,
         random_state=42,
         n_jobs=-1

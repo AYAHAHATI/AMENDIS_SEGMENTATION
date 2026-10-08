@@ -1,46 +1,32 @@
-"""
-predict_anomalies_2026.py
-
-Application du modèle Isolation Forest historique
-sur les données 2026.
-
-Le modèle a été entraîné sur les données historiques 2022-2025.
-Les données 2026 sont utilisées uniquement comme données de test.
-
-Aucun réentraînement du modèle n'est effectué sur 2026.
-"""
-
+import pandas as pd
+import joblib
 import os
 
-import joblib
-import pandas as pd
 
+# ============================================================
+# PARAMÈTRES
+# ============================================================
 
-# ==========================================================
-# CONFIGURATION
-# ==========================================================
+# Fichier contenant les profils de consommation 2026
+INPUT_FILE = "data/final/clients_segmentes_2026.csv"
 
-INPUT_FILE = (
-    "/opt/airflow/data/final/"
-    "clients_segmentes_2026.csv"
-)
-
+# Modèle Isolation Forest validé du projet
 MODEL_FILE = (
-    "/opt/airflow/data/final/"
-    "isolation_forest_model.joblib"
+    "data/final/"
+    "isolation_forest_model_new.joblib"
 )
 
+# Scaler appris sur les données historiques 2022-2025
 SCALER_FILE = (
-    "/opt/airflow/data/final/"
-    "isolation_forest_scaler.joblib"
+    "data/final/"
+    "isolation_forest_scaler_new.joblib"
 )
 
-OUTPUT_FILE = (
-    "/opt/airflow/data/final/"
-    "anomaly_scores_2026.csv"
-)
+# Fichier de sortie
+OUTPUT_FILE = "data/final/anomaly_scores_2026.csv"
 
 
+# Variables utilisées pour la détection
 FEATURES = [
     "CONSO_TOTALE",
     "CONSO_MOYENNE",
@@ -50,82 +36,56 @@ FEATURES = [
 ]
 
 
-# ==========================================================
-# PRÉDICTION DES ANOMALIES 2026
-# ==========================================================
+# ============================================================
+# DÉTECTION DES ANOMALIES 2026
+# ============================================================
 
-def predict_anomalies_2026():
+def detect_anomalies_2026():
 
     print("=" * 70)
-    print("DÉTECTION DES ANOMALIES 2026")
-    print("MODÈLE : ISOLATION FOREST")
+    print("DÉTECTION DES ANOMALIES - DONNÉES 2026")
     print("=" * 70)
 
-    # ------------------------------------------------------
-    # 1. Vérification des fichiers
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 1. Chargement des données 2026
+    # --------------------------------------------------------
 
-    print("\nVérification des fichiers...")
+    print("\n[1/5] Chargement des données 2026...")
 
     if not os.path.exists(INPUT_FILE):
-
         raise FileNotFoundError(
-            f"Dataset 2026 introuvable : {INPUT_FILE}"
+            f"Fichier introuvable : {INPUT_FILE}"
         )
-
-    if not os.path.exists(MODEL_FILE):
-
-        raise FileNotFoundError(
-            f"Modèle Isolation Forest introuvable : {MODEL_FILE}"
-        )
-
-    if not os.path.exists(SCALER_FILE):
-
-        raise FileNotFoundError(
-            f"Scaler historique introuvable : {SCALER_FILE}"
-        )
-
-    print("Tous les fichiers nécessaires sont disponibles.")
-
-    # ------------------------------------------------------
-    # 2. Chargement des données 2026
-    # ------------------------------------------------------
-
-    print("\nChargement des données 2026...")
 
     df = pd.read_csv(INPUT_FILE)
 
-    print(
-        f"Nombre de clients 2026 : {len(df)}"
-    )
+    print(f"Nombre de clients : {len(df):,}")
+    print(f"Nombre de variables : {len(df.columns)}")
 
-    # ------------------------------------------------------
-    # 3. Vérification des features
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 2. Vérification des variables
+    # --------------------------------------------------------
+
+    print("\n[2/5] Vérification des variables...")
 
     missing_features = [
-        col
-        for col in FEATURES
-        if col not in df.columns
+        feature
+        for feature in FEATURES
+        if feature not in df.columns
     ]
 
     if missing_features:
-
         raise ValueError(
-            "Features manquantes dans les données 2026 : "
-            + str(missing_features)
+            f"Variables manquantes : {missing_features}"
         )
 
-    print("\nFeatures utilisées :")
-    print(FEATURES)
+    print("Variables utilisées :")
 
-    # ------------------------------------------------------
-    # 4. Préparation des données
-    # ------------------------------------------------------
+    for feature in FEATURES:
+        print(f"  - {feature}")
 
-    X = df[FEATURES].copy()
-
-    missing_values = X.isnull().sum()
+    # Vérification des valeurs manquantes
+    missing_values = df[FEATURES].isnull().sum()
 
     if missing_values.sum() > 0:
 
@@ -133,155 +93,159 @@ def predict_anomalies_2026():
         print(missing_values)
 
         raise ValueError(
-            "Des valeurs manquantes sont présentes "
-            "dans les features 2026."
+            "Les variables utilisées pour la détection "
+            "contiennent des valeurs manquantes."
         )
 
     print("\nAucune valeur manquante détectée.")
 
-    # ------------------------------------------------------
-    # 5. Chargement du scaler historique
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 3. Chargement du scaler historique
+    # --------------------------------------------------------
 
-    print("\nChargement du scaler historique 2022-2025...")
+    print("\n[3/5] Chargement du scaler historique...")
+
+    if not os.path.exists(SCALER_FILE):
+        raise FileNotFoundError(
+            f"Scaler introuvable : {SCALER_FILE}"
+        )
 
     scaler = joblib.load(SCALER_FILE)
 
-    print("Scaler historique chargé.")
+    print(
+        f"Scaler chargé : {SCALER_FILE}"
+    )
 
-    # ------------------------------------------------------
-    # 6. Standardisation 2026
-    # ------------------------------------------------------
+    # Sélection des variables
+    X = df[FEATURES].copy()
 
-    print("\nStandardisation des données 2026...")
-
+    # Standardisation avec le scaler historique
     X_scaled = scaler.transform(X)
 
-    print(
-        "Standardisation terminée avec le scaler "
-        "entraîné sur 2022-2025."
-    )
+    print("Standardisation terminée.")
 
-    # ------------------------------------------------------
-    # 7. Chargement du modèle historique
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 4. Chargement du modèle Isolation Forest
+    # --------------------------------------------------------
 
-    print(
-        "\nChargement du modèle Isolation Forest "
-        "historique 2022-2025..."
-    )
+    print("\n[4/5] Chargement du modèle Isolation Forest...")
+
+    if not os.path.exists(MODEL_FILE):
+        raise FileNotFoundError(
+            f"Modèle introuvable : {MODEL_FILE}"
+        )
 
     model = joblib.load(MODEL_FILE)
 
-    print("Modèle historique chargé.")
+    print(
+        f"Modèle chargé : {MODEL_FILE}"
+    )
 
-    # ------------------------------------------------------
-    # 8. Prédiction
-    # ------------------------------------------------------
+    print(
+        f"Nombre d'arbres : {model.n_estimators}"
+    )
 
-    print("\nDétection des anomalies 2026...")
+    print(
+        f"Contamination : {model.contamination}"
+    )
+
+    # --------------------------------------------------------
+    # 5. Détection des anomalies
+    # --------------------------------------------------------
+
+    print("\n[5/5] Détection des anomalies...")
+
+    # Isolation Forest :
+    #  1  -> observation normale
+    # -1  -> observation atypique
 
     predictions = model.predict(X_scaled)
 
-    scores = model.decision_function(X_scaled)
+    # Score d'anomalie
+    anomaly_scores = model.decision_function(X_scaled)
 
-    # ------------------------------------------------------
-    # 9. Ajout des résultats
-    # ------------------------------------------------------
+    # Ajout des résultats
+    df["ANOMALIE"] = predictions
 
-    df_result = df.copy()
+    df["SCORE_ANOMALIE"] = anomaly_scores
 
-    df_result["ANOMALIE_ISOLATION_FOREST"] = (
-        predictions == -1
+    # Indicateur explicite :
+    # 1 = anomalie
+    # 0 = normal
+    df["EST_ANOMALIE"] = (
+        df["ANOMALIE"] == -1
+    ).astype(int)
+
+    # --------------------------------------------------------
+    # Calcul des statistiques
+    # --------------------------------------------------------
+
+    nombre_anomalies = int(
+        df["EST_ANOMALIE"].sum()
     )
 
-    df_result["ANOMALY_SCORE"] = scores
-
-    # ------------------------------------------------------
-    # 10. Statistiques
-    # ------------------------------------------------------
-
-    nb_anomalies = int(
-        df_result[
-            "ANOMALIE_ISOLATION_FOREST"
-        ].sum()
+    nombre_normaux = (
+        len(df) - nombre_anomalies
     )
 
-    nb_normaux = (
-        len(df_result)
-        - nb_anomalies
+    pourcentage_anomalies = (
+        nombre_anomalies / len(df) * 100
     )
 
-    pourcentage = (
-        nb_anomalies
-        / len(df_result)
-        * 100
+    pourcentage_normaux = (
+        nombre_normaux / len(df) * 100
     )
 
-    # ------------------------------------------------------
-    # 11. Affichage des résultats
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # Affichage des résultats
+    # --------------------------------------------------------
 
     print("\n" + "=" * 70)
-    print("RÉSULTATS - DONNÉES 2026")
+    print("RÉSULTATS DE LA DÉTECTION")
     print("=" * 70)
 
     print(
         f"Nombre total de clients : "
-        f"{len(df_result)}"
+        f"{len(df):,}"
     )
 
     print(
-        f"Nombre d'anomalies : "
-        f"{nb_anomalies}"
+        f"Clients normaux         : "
+        f"{nombre_normaux:,} "
+        f"({pourcentage_normaux:.2f} %)"
     )
 
     print(
-        f"Pourcentage d'anomalies : "
-        f"{pourcentage:.2f}%"
+        f"Clients atypiques       : "
+        f"{nombre_anomalies:,} "
+        f"({pourcentage_anomalies:.2f} %)"
     )
 
-    print(
-        f"Nombre de clients normaux : "
-        f"{nb_normaux}"
+    # --------------------------------------------------------
+    # Sauvegarde du résultat
+    # --------------------------------------------------------
+
+    os.makedirs(
+        os.path.dirname(OUTPUT_FILE),
+        exist_ok=True
     )
 
-    # ------------------------------------------------------
-    # 12. Sauvegarde
-    # ------------------------------------------------------
-
-    df_result.to_csv(
+    df.to_csv(
         OUTPUT_FILE,
         index=False
     )
 
-    print("\nDataset 2026 avec détection des anomalies généré :")
+    print("\nFichier sauvegardé :")
     print(OUTPUT_FILE)
 
-    # ------------------------------------------------------
-    # 13. Résumé
-    # ------------------------------------------------------
-
     print("\n" + "=" * 70)
-    print("PRÉDICTION 2026 TERMINÉE")
+    print("DÉTECTION TERMINÉE")
     print("=" * 70)
 
-    print(
-        "Le modèle Isolation Forest entraîné sur "
-        "2022-2025 a été appliqué aux données 2026."
-    )
 
-    print(
-        "Aucun réentraînement n'a été effectué sur 2026."
-    )
-
-    return df_result
-
-
-# ==========================================================
-# EXÉCUTION DIRECTE
-# ==========================================================
+# ============================================================
+# EXÉCUTION
+# ============================================================
 
 if __name__ == "__main__":
-
-    predict_anomalies_2026()
+    detect_anomalies_2026()
