@@ -25,6 +25,11 @@ x-airflow-common:
     AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
 
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Délais plus longs : sur une machine lente (Docker Desktop sous
+    # Windows), le serveur web dépasse les 120 s par défaut et redémarre
+    # en boucle ("No response from gunicorn master within 120 seconds").
+    AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: '600'
+    AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: '600'
 
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
 
