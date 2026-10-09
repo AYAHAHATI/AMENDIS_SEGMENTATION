@@ -52,9 +52,15 @@ Sorties :
 
 ### 2. Traitement 2026 avec Airflow
 
+Docker Desktop doit être lancé (« Engine running »). Le fichier `.env` n'est à créer qu'une fois.
+
 ```bash
+# Windows (cmd)
+echo AIRFLOW_UID=50000> .env
+# Linux / macOS
 echo "AIRFLOW_UID=$(id -u)" > .env
-docker compose up -d
+
+docker compose up -d --build
 ```
 
 Ouvrir http://localhost:8080 (airflow / airflow), puis lancer le DAG `amendis_pipeline` :
