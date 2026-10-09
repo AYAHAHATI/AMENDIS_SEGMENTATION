@@ -70,6 +70,12 @@ extract → transform (janvier–avril 2026) → aggregate → feature_engineeri
 → predict (K-Means) → create_final → predict_segments_2026 + detect_anomalies_2026
 ```
 
+Sans Docker, les mêmes 9 étapes s'exécutent avec Python seul :
+
+```bash
+python run_2026.py
+```
+
 ### 3. Fichiers pour Power BI (`data/final/`)
 
 | Fichier | Contenu |
