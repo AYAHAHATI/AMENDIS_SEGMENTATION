@@ -28,9 +28,14 @@ from sklearn.svm import OneClassSVM
 # 1. CHARGEMENT DES DONNÉES
 # ==========================================================
 
-INPUT_FILE = "data/final/clients_segmentes.csv"
+# Profils janvier-avril 2022-2025 (produits par main.py).
+# LOF et One-Class SVM ont un coût quadratique : la comparaison est
+# faite sur un échantillon aléatoire identique pour les trois modèles.
+INPUT_FILE = "data/intermediate/clients_cluster_k5.csv"
+SAMPLE_SIZE = 20_000
 
 df = pd.read_csv(INPUT_FILE)
+df = df.sample(n=min(SAMPLE_SIZE, len(df)), random_state=42)
 
 print("=" * 70)
 print("COMPARAISON DES MODÈLES DE DÉTECTION D'ANOMALIES")
@@ -269,7 +274,7 @@ OUTPUT_COMPARISON = (
 
 OUTPUT_SCORES = (
     "data/final/"
-    "anomaly_scores_historical.csv"
+    "anomaly_comparison_scores.csv"
 )
 
 comparison.to_csv(

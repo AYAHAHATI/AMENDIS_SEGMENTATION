@@ -1,283 +1,68 @@
 """
 choose_k.py
 
-Choix du meilleur nombre de clusters (K)
-avec :
-- la méthode du coude (Elbow Method)
-- le Silhouette Score
+Choix du nombre de clusters sur les profils janvier-avril 2022-2025 :
+- méthode du coude (inertie, sur tous les profils) ;
+- Silhouette Score (sur un échantillon aléatoire, car son coût
+  est quadratique en nombre de profils).
+
+Sorties : data/intermediate/elbow_method.png,
+          data/intermediate/silhouette_score.png,
+          data/intermediate/choix_k.csv
 """
 
-import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
+import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-
-
-# ==========================================================
-# CHARGEMENT DES DONNÉES
-# ==========================================================
-
-df = pd.read_csv(
-    "data/intermediate/scaled_features.csv"
-)
-
-print("=" * 60)
-print("DONNÉES")
-print("=" * 60)
-
-print("Dimensions originales :", df.shape)
-print("\nColonnes disponibles :")
-print(list(df.columns))
-
-
-# ==========================================================
-# VARIABLES UTILISÉES POUR K-MEANS
-# ==========================================================
-
-features = [
-    "CONSO_TOTALE",
-    "CONSO_MOYENNE",
-    "CONSO_MAX",
-    "CONSO_MIN",
-    "NB_RELEVES"
-]
-
-df = df[features]
-
-print("\nVariables utilisées pour K-Means :")
-print(features)
-
-print("\nDimensions après sélection :")
-print(df.shape)
-
-print("\nAperçu des données :")
-print(df.head())
-
-
-# ==========================================================
-# VÉRIFICATION DES VALEURS MANQUANTES
-# ==========================================================
-
-print("\n" + "=" * 60)
-print("VÉRIFICATION DES DONNÉES")
-print("=" * 60)
-
-print("\nValeurs manquantes :")
-print(df.isnull().sum())
-
-if df.isnull().sum().sum() > 0:
-    raise ValueError(
-        "Des valeurs manquantes sont présentes dans les données."
-    )
-
-print("\nAucune valeur manquante détectée.")
-
-
-# ==========================================================
-# TEST DE PLUSIEURS VALEURS DE K
-# ==========================================================
-
-k_values = range(2, 11)
-
-inertias = []
-silhouettes = []
-
-print("\n" + "=" * 60)
-print("CALCUL DES INDICATEURS")
-print("=" * 60)
-
-print()
-
-for k in k_values:
-
-    print(f"Calcul pour K = {k}...")
-
-    model = KMeans(
-        n_clusters=k,
-        random_state=42,
-        n_init=10
-    )
-
-    labels = model.fit_predict(df)
-
-    # ------------------------------------------------------
-    # Inertie
-    # ------------------------------------------------------
-
-    inertia = model.inertia_
-
-    inertias.append(inertia)
-
-    # ------------------------------------------------------
-    # Silhouette Score
-    # ------------------------------------------------------
-
-    score = silhouette_score(
-        df,
-        labels
-    )
-
-    silhouettes.append(score)
-
-    print(
-        f"K = {k} | "
-        f"Inertia = {inertia:.2f} | "
-        f"Silhouette = {score:.4f}"
-    )
-
-
-# ==========================================================
-# RÉSULTATS
-# ==========================================================
-
-print("\n" + "=" * 60)
-print("RÉSULTATS")
-print("=" * 60)
-
-print("\nRésumé :")
-
-for i, k in enumerate(k_values):
-
-    print(
-        f"K = {k} | "
-        f"Inertia = {inertias[i]:.2f} | "
-        f"Silhouette = {silhouettes[i]:.4f}"
-    )
-
-
-# ==========================================================
-# MEILLEUR K SELON LE SILHOUETTE SCORE
-# ==========================================================
-
-best_k_silhouette = list(k_values)[
-    silhouettes.index(max(silhouettes))
-]
-
-best_score = max(silhouettes)
-
-print("\n" + "=" * 60)
-print("MEILLEUR K SELON LE SILHOUETTE SCORE")
-print("=" * 60)
-
-print(
-    f"K = {best_k_silhouette}"
-)
-
-print(
-    f"Silhouette Score = {best_score:.4f}"
-)
-
-
-# ==========================================================
-# GRAPHE ELBOW
-# ==========================================================
-
-plt.figure(
-    figsize=(8, 5)
-)
-
-plt.plot(
-    list(k_values),
-    inertias,
-    marker="o"
-)
-
-plt.title(
-    "Méthode du coude (Elbow Method)"
-)
-
-plt.xlabel(
-    "Nombre de clusters (K)"
-)
-
-plt.ylabel(
-    "Inertia"
-)
-
-plt.xticks(
-    list(k_values)
-)
-
-plt.grid(
-    True
-)
-
-plt.tight_layout()
-
-plt.savefig(
-    "data/intermediate/elbow_method.png",
-    dpi=300
-)
-
-plt.show()
-
-
-# ==========================================================
-# GRAPHE SILHOUETTE
-# ==========================================================
-
-plt.figure(
-    figsize=(8, 5)
-)
-
-plt.plot(
-    list(k_values),
-    silhouettes,
-    marker="o"
-)
-
-plt.title(
-    "Silhouette Score"
-)
-
-plt.xlabel(
-    "Nombre de clusters (K)"
-)
-
-plt.ylabel(
-    "Score"
-)
-
-plt.xticks(
-    list(k_values)
-)
-
-plt.grid(
-    True
-)
-
-plt.tight_layout()
-
-plt.savefig(
-    "data/intermediate/silhouette_score.png",
-    dpi=300
-)
-
-plt.show()
-
-
-# ==========================================================
-# FIN
-# ==========================================================
-
-print("\n" + "=" * 60)
-print("ANALYSE TERMINÉE")
-print("=" * 60)
-
-print(
-    "\nGraphique Elbow enregistré : "
-    "data/intermediate/elbow_method.png"
-)
-
-print(
-    "Graphique Silhouette enregistré : "
-    "data/intermediate/silhouette_score.png"
-)
-
-print(
-    f"\nMeilleur K selon le Silhouette Score : "
-    f"{best_k_silhouette}"
-)
-
-print("\nFin du programme.")
+from sklearn.preprocessing import StandardScaler
+
+from config.config import INTERMEDIATE_DIR, MODEL_FEATURES, RANDOM_STATE
+
+INPUT_FILE = INTERMEDIATE_DIR / "training_windows.csv"
+SILHOUETTE_SAMPLE = 20_000
+
+
+def choose_k(k_values=range(2, 11)):
+    df = pd.read_csv(INPUT_FILE)
+    df = df[df["PROFIL_COMPLET"]]
+    X = StandardScaler().fit_transform(df[MODEL_FEATURES])
+    sample_size = min(SILHOUETTE_SAMPLE, len(X))
+
+    rows = []
+    for k in k_values:
+        model = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=10)
+        labels = model.fit_predict(X)
+        score = silhouette_score(
+            X, labels, sample_size=sample_size, random_state=RANDOM_STATE
+        )
+        rows.append({"K": k, "INERTIE": model.inertia_, "SILHOUETTE": score})
+        print(f"K={k:2d} | inertie={model.inertia_:12,.1f} | silhouette={score:.3f}")
+
+    result = pd.DataFrame(rows)
+    result.to_csv(INTERMEDIATE_DIR / "choix_k.csv", index=False)
+
+    for column, title, filename in [
+        ("INERTIE", "Méthode du coude (Elbow Method)", "elbow_method.png"),
+        ("SILHOUETTE", "Silhouette Score", "silhouette_score.png"),
+    ]:
+        plt.figure(figsize=(8, 5))
+        plt.plot(result["K"], result[column], marker="o")
+        plt.title(title)
+        plt.xlabel("Nombre de clusters (K)")
+        plt.ylabel(column.capitalize())
+        plt.xticks(result["K"])
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(INTERMEDIATE_DIR / filename, dpi=300)
+        plt.close()
+
+    best = result.loc[result["SILHOUETTE"].idxmax()]
+    print(f"\nMeilleur Silhouette : K={int(best.K)} ({best.SILHOUETTE:.3f})")
+    return result
+
+
+if __name__ == "__main__":
+    choose_k()

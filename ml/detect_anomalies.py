@@ -1,279 +1,107 @@
 """
 detect_anomalies.py
 
-Détection des anomalies des clients Amendis
-avec le modèle Isolation Forest.
+Entraîne la détection des comportements atypiques sur les profils
+janvier-avril 2022-2025, avec un Isolation Forest PAR SEGMENT.
 
-Données historiques : 2022-2025
+Pourquoi par segment ?
+Un modèle global, entraîné sur tous les contrats, signale surtout
+les plus gros consommateurs : ils sont "rares" uniquement parce
+qu'ils consomment beaucoup. Avec un modèle par segment, un contrat
+est atypique s'il s'écarte des contrats de son propre niveau de
+consommation.
 
-Le modèle entraîné sur les données historiques
-est sauvegardé afin de pouvoir être réutilisé
-ultérieurement sur les données 2026.
+Un segment trop petit (< MIN_SEGMENT_SIZE_FOR_IF profils) n'a pas
+de modèle : ses contrats sont marqués "non évalué".
+
+Sortie : models/isolation_forest_models.joblib
 """
 
-import os
-
 import joblib
+import numpy as np
 import pandas as pd
-
 from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
 
-
-# ==========================================================
-# CONFIGURATION
-# ==========================================================
-
-INPUT_FILE = (
-    "data/final/"
-    "clients_segmentes.csv"
+from config.config import (
+    INTERMEDIATE_DIR,
+    FINAL_DIR,
+    MODEL_FEATURES,
+    N_CLUSTERS,
+    SCALER_FILE,
+    ANOMALY_MODEL_FILE,
+    ISOLATION_FOREST_TREES,
+    ISOLATION_FOREST_CONTAMINATION,
+    MIN_SEGMENT_SIZE_FOR_IF,
+    RANDOM_STATE,
+    ensure_dirs,
 )
 
-OUTPUT_FILE = (
-    "data/final/"
-    "anomaly_scores_historical.csv"
-)
-
-MODEL_FILE = (
-    "data/final/"
-    "isolation_forest_model.joblib"
-)
-
-SCALER_FILE = (
-    "data/final/"
-    "isolation_forest_scaler.joblib"
-)
+INPUT_FILE = INTERMEDIATE_DIR / f"clients_cluster_k{N_CLUSTERS}.csv"
 
 
-FEATURES = [
-    "CONSO_TOTALE",
-    "CONSO_MOYENNE",
-    "CONSO_MAX",
-    "CONSO_MIN",
-    "NB_RELEVES"
-]
-
-
-# ==========================================================
-# DÉTECTION DES ANOMALIES
-# ==========================================================
-
-def detect_anomalies():
-
-    print("=" * 70)
-    print("DÉTECTION DES ANOMALIES - ISOLATION FOREST")
-    print("=" * 70)
-
-    # ------------------------------------------------------
-    # 1. Chargement des données historiques
-    # ------------------------------------------------------
-
-    print("\nChargement des données historiques 2022-2025...")
-
-    if not os.path.exists(INPUT_FILE):
-
-        raise FileNotFoundError(
-            f"Fichier introuvable : {INPUT_FILE}"
-        )
+def train_anomaly_models():
+    ensure_dirs()
+    if not INPUT_FILE.exists():
+        raise FileNotFoundError(f"{INPUT_FILE} introuvable : lancer ml/train_kmeans.py")
 
     df = pd.read_csv(INPUT_FILE)
+    scaler = joblib.load(SCALER_FILE)
+    X = pd.DataFrame(scaler.transform(df[MODEL_FEATURES]), columns=MODEL_FEATURES)
 
-    print(
-        f"Nombre de clients : {len(df)}"
+    models = {}
+    for cluster, index in df.groupby("CLUSTER").groups.items():
+        if len(index) >= MIN_SEGMENT_SIZE_FOR_IF:
+            models[int(cluster)] = IsolationForest(
+                n_estimators=ISOLATION_FOREST_TREES,
+                contamination=ISOLATION_FOREST_CONTAMINATION,
+                random_state=RANDOM_STATE,
+                n_jobs=-1,
+            ).fit(X.loc[index])
+            print(f"Cluster {cluster} : modèle entraîné ({len(index):,} profils)")
+        else:
+            print(
+                f"Cluster {cluster} : {len(index):,} profils "
+                f"(< {MIN_SEGMENT_SIZE_FOR_IF}) -> non évalué"
+            )
+
+    joblib.dump(models, ANOMALY_MODEL_FILE)
+
+    scored = score_profiles(df, X, models)
+    print("\nAnomalies sur l'historique par segment :")
+    print(summarize(scored).to_string())
+    scored.to_csv(FINAL_DIR / "anomaly_scores_historical.csv", index=False)
+    print(f"Modèles enregistrés : {ANOMALY_MODEL_FILE}")
+    return models
+
+
+def score_profiles(df, X_scaled, models):
+    """
+    EST_ANOMALIE : 1 = atypique, 0 = normal, vide = non évalué.
+    SCORE_ANOMALIE : plus il est bas, plus le profil est atypique.
+    """
+    result = df.copy()
+    result["EST_ANOMALIE"] = np.nan
+    result["SCORE_ANOMALIE"] = np.nan
+
+    for cluster, index in df.groupby("CLUSTER").groups.items():
+        model = models.get(int(cluster))
+        if model is None:
+            continue
+        Xc = X_scaled.loc[index]
+        result.loc[index, "EST_ANOMALIE"] = (model.predict(Xc) == -1).astype(int)
+        result.loc[index, "SCORE_ANOMALIE"] = model.decision_function(Xc)
+    return result
+
+
+def summarize(scored):
+    summary = scored.groupby("LIBELLE_CLUSTER").agg(
+        CONTRATS=("EST_ANOMALIE", "size"),
+        EVALUES=("EST_ANOMALIE", "count"),
+        ANOMALIES=("EST_ANOMALIE", "sum"),
     )
+    summary["TAUX_%"] = (summary["ANOMALIES"] / summary["EVALUES"] * 100).round(2)
+    return summary
 
-    # ------------------------------------------------------
-    # 2. Vérification des features
-    # ------------------------------------------------------
-
-    missing_features = [
-        col
-        for col in FEATURES
-        if col not in df.columns
-    ]
-
-    if missing_features:
-
-        raise ValueError(
-            "Features manquantes : "
-            + str(missing_features)
-        )
-
-    print("\nFeatures utilisées :")
-    print(FEATURES)
-
-    # ------------------------------------------------------
-    # 3. Préparation des données
-    # ------------------------------------------------------
-
-    X = df[FEATURES].copy()
-
-    missing_values = X.isnull().sum()
-
-    if missing_values.sum() > 0:
-
-        print("\nValeurs manquantes détectées :")
-        print(missing_values)
-
-        raise ValueError(
-            "Des valeurs manquantes sont présentes "
-            "dans les features."
-        )
-
-    print("\nAucune valeur manquante détectée.")
-
-    # ------------------------------------------------------
-    # 4. Standardisation
-    # ------------------------------------------------------
-
-    print("\nStandardisation...")
-
-    scaler = StandardScaler()
-
-    X_scaled = scaler.fit_transform(X)
-
-    print("Standardisation terminée.")
-
-    # ------------------------------------------------------
-    # 5. Entraînement Isolation Forest
-    # ------------------------------------------------------
-
-    print("\nEntraînement Isolation Forest...")
-
-    model = IsolationForest(
-        n_estimators=200,
-        contamination=0.05,
-        random_state=42,
-        n_jobs=-1
-    )
-
-    model.fit(X_scaled)
-
-    print("Modèle entraîné.")
-
-    # ------------------------------------------------------
-    # 6. Détection
-    # ------------------------------------------------------
-
-    print("\nDétection des anomalies...")
-
-    predictions = model.predict(X_scaled)
-
-    scores = model.decision_function(X_scaled)
-
-    # ------------------------------------------------------
-    # 7. Ajout des résultats
-    # ------------------------------------------------------
-
-    df_result = df.copy()
-
-    df_result["ANOMALIE_ISOLATION_FOREST"] = (
-        predictions == -1
-    )
-
-    df_result["ANOMALY_SCORE"] = scores
-
-    # ------------------------------------------------------
-    # 8. Statistiques
-    # ------------------------------------------------------
-
-    nb_anomalies = int(
-        df_result[
-            "ANOMALIE_ISOLATION_FOREST"
-        ].sum()
-    )
-
-    nb_normaux = (
-        len(df_result)
-        - nb_anomalies
-    )
-
-    pourcentage = (
-        nb_anomalies
-        / len(df_result)
-        * 100
-    )
-
-    print("\n" + "=" * 70)
-    print("RÉSULTATS")
-    print("=" * 70)
-
-    print(
-        f"Nombre total de clients : "
-        f"{len(df_result)}"
-    )
-
-    print(
-        f"Nombre d'anomalies : "
-        f"{nb_anomalies}"
-    )
-
-    print(
-        f"Pourcentage d'anomalies : "
-        f"{pourcentage:.2f}%"
-    )
-
-    print(
-        f"Nombre de clients normaux : "
-        f"{nb_normaux}"
-    )
-
-    # ------------------------------------------------------
-    # 9. Sauvegarde du dataset avec les anomalies
-    # ------------------------------------------------------
-
-    df_result.to_csv(
-        OUTPUT_FILE,
-        index=False
-    )
-
-    print("\nDataset des anomalies généré :")
-    print(OUTPUT_FILE)
-
-    # ------------------------------------------------------
-    # 10. Sauvegarde du modèle
-    # ------------------------------------------------------
-
-    joblib.dump(
-        model,
-        MODEL_FILE
-    )
-
-    print("\nModèle Isolation Forest sauvegardé :")
-    print(MODEL_FILE)
-
-    # ------------------------------------------------------
-    # 11. Sauvegarde du scaler
-    # ------------------------------------------------------
-
-    joblib.dump(
-        scaler,
-        SCALER_FILE
-    )
-
-    print("\nScaler sauvegardé :")
-    print(SCALER_FILE)
-
-    # ------------------------------------------------------
-    # 12. Résumé
-    # ------------------------------------------------------
-
-    print("\n" + "=" * 70)
-    print("DÉTECTION TERMINÉE")
-    print("=" * 70)
-
-    print(
-        "Le modèle historique 2022-2025 est prêt "
-        "à être réutilisé sur les données 2026."
-    )
-
-    return df_result
-
-
-# ==========================================================
-# EXÉCUTION DIRECTE
-# ==========================================================
 
 if __name__ == "__main__":
-
-    detect_anomalies()
+    train_anomaly_models()

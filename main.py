@@ -1,100 +1,76 @@
-from pipeline.extract import DataExtractor
-from pipeline.transform import DataTransformer
-from pipeline.aggregate import DataAggregator
-from pipeline.merge import DataMerger
-from pipeline.feature_engineering import FeatureEngineer
-from pipeline.scaler import DataScaler
+"""
+main.py
+
+Pipeline d'ENTRAÎNEMENT (historique 2022-2025).
+À lancer une fois, avant le DAG Airflow qui traite 2026.
+
+Étapes :
+1. chargement et nettoyage de l'historique (un seul réseau) ;
+2. profils janvier-avril 2022, 2023, 2024, 2025 ;
+3. (option --choose-k) coude + Silhouette ;
+4. scaler + K-Means ;
+5. Isolation Forest par segment ;
+6. comparaison des modèles de prédiction + modèle final.
+
+Usage :
+    python main.py                   # données complètes (data/raw)
+    python main.py --sample          # échantillons (data/sample)
+    python main.py --choose-k        # ajoute l'étude du nombre de clusters
+    AMENDIS_RESEAU=EAU python main.py  # modèle pour le réseau eau
+"""
+
+import argparse
+import os
+import sys
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Entraînement Amendis")
+    parser.add_argument("--sample", action="store_true",
+                        help="utiliser data/sample au lieu de data/raw")
+    parser.add_argument("--choose-k", action="store_true",
+                        help="calculer coude et Silhouette pour K=2..10")
+    return parser.parse_args()
 
 
 def main():
+    args = parse_args()
+    if args.sample:
+        # Doit être défini avant l'import de la configuration
+        os.environ["AMENDIS_DATA_MODE"] = "sample"
+
+    from config.config import DATA_MODE, NETWORK, N_CLUSTERS
+    from pipeline.history import load_history
+    from ml.build_training_windows import build_training_windows
+    from ml.train_kmeans import train_kmeans
+    from ml.detect_anomalies import train_anomaly_models
+    from ml.predict_segments import train_segment_model
 
     print("=" * 60)
-    print("DEBUT DU PIPELINE AMENDIS")
+    print(f"ENTRAÎNEMENT AMENDIS | données : {DATA_MODE} | réseau : {NETWORK} | K = {N_CLUSTERS}")
     print("=" * 60)
 
-    # ==========================================================
-    # EXTRACTION
-    # ==========================================================
+    history = load_history()
 
-    extractor = DataExtractor(data_path="data/sample")
+    print("\n[1/4] Profils janvier-avril 2022-2025")
+    build_training_windows(history)
 
-    extractor.run(
-        "HIST_CSO_SAMPLE.csv",
-        "hist_raw.csv"
-    )
+    if args.choose_k:
+        from ml.choose_k import choose_k
+        print("\n[option] Choix du nombre de clusters")
+        choose_k()
 
-    extractor.run(
-        "FACT_STG_SAMPLE.csv",
-        "fact_raw.csv"
-    )
+    print("\n[2/4] Scaler + K-Means")
+    train_kmeans()
 
-    # ==========================================================
-    # TRANSFORMATION
-    # ==========================================================
+    print("\n[3/4] Isolation Forest par segment")
+    train_anomaly_models()
 
-    transformer = DataTransformer()
+    print("\n[4/4] Prédiction supervisée des segments")
+    train_segment_model(history)
 
-    transformer.run(
-        "hist_raw.csv",
-        "hist_clean.csv"
-    )
-
-    transformer.run(
-        "fact_raw.csv",
-        "fact_clean.csv"
-    )
-
-    # ==========================================================
-    # AGRÉGATION
-    # ==========================================================
-
-    aggregator = DataAggregator()
-
-    aggregator.run(
-        "hist_clean.csv",
-        "fact_clean.csv",
-        "hist_client.csv",
-        "fact_client.csv"
-    )
-
-    # ==========================================================
-    # FUSION
-    # ==========================================================
-
-    merger = DataMerger()
-
-    merger.run(
-        "hist_client.csv",
-        "fact_client.csv",
-        "dataset_final.csv"
-    )
-
-    # ==========================================================
-    # FEATURE ENGINEERING
-    # ==========================================================
-
-    engineer = FeatureEngineer()
-
-    engineer.run(
-        "dataset_final.csv",
-        "features.csv"
-    )
-
-    # ==========================================================
-    # STANDARDISATION
-    # ==========================================================
-
-    scaler = DataScaler()
-
-    scaler.run(
-        "features.csv",
-        "scaled_features.csv"
-    )
-
-    print("\n" + "=" * 60)
-    print("PIPELINE ETL TERMINÉ AVEC SUCCÈS")
-    print("=" * 60)
+    print("\nENTRAÎNEMENT TERMINÉ : le DAG amendis_pipeline peut traiter 2026.")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

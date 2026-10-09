@@ -7,6 +7,8 @@ Extraction des données du projet Amendis.
 import pandas as pd
 from pathlib import Path
 
+from pipeline.history import detect_separator
+
 
 # ==========================================================
 # RACINE DU PROJET
@@ -71,7 +73,7 @@ class DataExtractor:
                 # Lecture de toutes les lignes
                 df = pd.read_csv(
                     file_path,
-                    sep=",",
+                    sep=detect_separator(file_path),
                     encoding=encoding,
                     low_memory=False
                 )

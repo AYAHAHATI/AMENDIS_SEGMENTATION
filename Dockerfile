@@ -7,3 +7,4 @@ RUN pip install --no-cache-dir -r /requirements.txt
 COPY ml /opt/airflow/ml
 COPY pipeline /opt/airflow/pipeline
 COPY dags /opt/airflow/dags
+COPY config /opt/airflow/config

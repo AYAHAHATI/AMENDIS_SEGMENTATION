@@ -1,268 +1,54 @@
 """
 feature_engineering.py
 
-Préparation des variables de consommation
-pour le Machine Learning.
+Prépare les variables de consommation à partir des profils agrégés.
+
+Chaque contrat garde ses 5 variables (dont NB_RELEVES) et un
+indicateur PROFIL_COMPLET (au moins MIN_RELEVES relevés dans la
+fenêtre). Seuls les profils complets sont ensuite segmentés.
 """
 
 import pandas as pd
-from pathlib import Path
 
-
-# ==========================================================
-# RACINE DU PROJET
-# ==========================================================
-
-BASE_DIR = Path(__file__).resolve().parent.parent
+from config.config import INTERMEDIATE_DIR, ID_COLUMN, FEATURES, MIN_RELEVES
 
 
 class FeatureEngineer:
-    """
-    Prépare les variables de consommation
-    utilisées par le modèle K-Means.
-    """
-
-    # ======================================================
-    # CHARGEMENT
-    # ======================================================
-
-    def load_dataframe(self, filename):
-        """
-        Charge un DataFrame depuis data/intermediate.
-        """
-
-        file_path = (
-            BASE_DIR
-            / "data"
-            / "intermediate"
-            / filename
-        )
-
-        if not file_path.exists():
-            raise FileNotFoundError(
-                f"Fichier introuvable : {file_path}"
-            )
-
-        return pd.read_csv(file_path)
-
-    # ======================================================
-    # FEATURE ENGINEERING
-    # ======================================================
 
     def prepare_features(self, df):
-        """
-        Prépare les variables utilisées pour la segmentation.
+        missing = [c for c in [ID_COLUMN] + FEATURES if c not in df.columns]
+        if missing:
+            raise ValueError(f"Colonnes manquantes : {missing}")
 
-        L'identifiant NUM_CTA_HASH est conservé afin de
-        pouvoir associer chaque cluster au bon client.
-        """
+        features = df[[ID_COLUMN] + FEATURES].copy()
+        features[FEATURES] = features[FEATURES].apply(
+            pd.to_numeric, errors="coerce"
+        )
 
-        print("\n" + "=" * 60)
-        print("FEATURE ENGINEERING")
-        print("=" * 60)
+        before = len(features)
+        features = features.dropna(subset=FEATURES).reset_index(drop=True)
+        print(f"Profils : {before:,} | après suppression des NaN : {len(features):,}")
 
-        # ==================================================
-        # VARIABLES NÉCESSAIRES
-        # ==================================================
+        duplicates = features[ID_COLUMN].duplicated().sum()
+        if duplicates:
+            raise ValueError(f"{duplicates} identifiants contrats dupliqués.")
 
-        required_columns = [
-            "NUM_CTA_HASH",
-            "CONSO_TOTALE",
-            "CONSO_MOYENNE",
-            "CONSO_MAX",
-            "CONSO_MIN",
-            "NB_RELEVES"
-        ]
-
-        missing_columns = [
-            col
-            for col in required_columns
-            if col not in df.columns
-        ]
-
-        if missing_columns:
-            raise ValueError(
-                "Colonnes manquantes : "
-                f"{missing_columns}"
-            )
-
-        # ==================================================
-        # SÉLECTION DES DONNÉES
-        # ==================================================
-
-        features = df[
-            [
-                "NUM_CTA_HASH",
-                "CONSO_TOTALE",
-                "CONSO_MOYENNE",
-                "CONSO_MAX",
-                "CONSO_MIN",
-                "NB_RELEVES"
-            ]
-        ].copy()
-
+        features["PROFIL_COMPLET"] = features["NB_RELEVES"] >= MIN_RELEVES
+        n_incomplete = int((~features["PROFIL_COMPLET"]).sum())
         print(
-            f"\nNombre de lignes avant traitement : "
-            f"{len(features)}"
+            f"Profils incomplets (< {MIN_RELEVES} relevés) : {n_incomplete:,} "
+            f"({n_incomplete / max(len(features), 1):.2%})"
         )
-
-        # ==================================================
-        # VALEURS NULLLES
-        # ==================================================
-
-        print("\nValeurs nulles :")
-        print(
-            features[
-                [
-                    "CONSO_TOTALE",
-                    "CONSO_MOYENNE",
-                    "CONSO_MAX",
-                    "CONSO_MIN",
-                    "NB_RELEVES"
-                ]
-            ].isnull().sum()
-        )
-
-        # ==================================================
-        # SUPPRESSION DES LIGNES INCOMPLÈTES
-        # ==================================================
-
-        numerical_columns = [
-            "CONSO_TOTALE",
-            "CONSO_MOYENNE",
-            "CONSO_MAX",
-            "CONSO_MIN",
-            "NB_RELEVES"
-        ]
-
-        features = (
-            features
-            .dropna(subset=numerical_columns)
-            .reset_index(drop=True)
-        )
-
-        print(
-            f"\nNombre de lignes après traitement : "
-            f"{len(features)}"
-        )
-
-        # ==================================================
-        # VÉRIFICATION DES IDENTIFIANTS
-        # ==================================================
-
-        if features["NUM_CTA_HASH"].isnull().any():
-
-            raise ValueError(
-                "Certains clients n'ont pas de "
-                "NUM_CTA_HASH."
-            )
-
-        if features["NUM_CTA_HASH"].duplicated().any():
-
-            duplicates = (
-                features["NUM_CTA_HASH"]
-                .duplicated()
-                .sum()
-            )
-
-            raise ValueError(
-                f"{duplicates} identifiants clients "
-                "sont dupliqués."
-            )
-
-        # ==================================================
-        # AFFICHAGE
-        # ==================================================
-
-        print("\nVariables utilisées pour la segmentation :")
-
-        print(
-            numerical_columns
-        )
-
-        print("\nIdentifiant conservé :")
-        print("NUM_CTA_HASH")
-
-        print("\nDimensions :")
-        print(features.shape)
-
-        print("\nAperçu :")
-        print(features.head())
-
         return features
-
-    # ======================================================
-    # SAUVEGARDE
-    # ======================================================
-
-    def save_dataframe(self, df, filename):
-        """
-        Sauvegarde le DataFrame dans data/intermediate.
-        """
-
-        output_path = (
-            BASE_DIR
-            / "data"
-            / "intermediate"
-        )
-
-        output_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        file_path = (
-            output_path
-            / filename
-        )
-
-        df.to_csv(
-            file_path,
-            index=False
-        )
-
-        print("\n" + "=" * 60)
-        print("SAUVEGARDE DES DONNÉES")
-        print("=" * 60)
-
-        print(
-            f"Fichier enregistré : {file_path}"
-        )
-
-    # ======================================================
-    # PIPELINE
-    # ======================================================
 
     def run(self, input_file, output_file):
-        """
-        Exécute le Feature Engineering.
-        """
+        input_path = INTERMEDIATE_DIR / input_file
+        if not input_path.exists():
+            raise FileNotFoundError(f"Fichier introuvable : {input_path}")
 
-        df = self.load_dataframe(
-            input_file
-        )
+        features = self.prepare_features(pd.read_csv(input_path))
 
-        features = self.prepare_features(
-            df
-        )
-
-        self.save_dataframe(
-            features,
-            output_file
-        )
-
+        output_path = INTERMEDIATE_DIR / output_file
+        features.to_csv(output_path, index=False)
+        print(f"Fichier enregistré : {output_path}")
         return features
-
-
-# ==========================================================
-# EXÉCUTION DIRECTE
-# ==========================================================
-
-if __name__ == "__main__":
-
-    engineer = FeatureEngineer()
-
-    engineer.run(
-        "dataset_final.csv",
-        "features.csv"
-    )
