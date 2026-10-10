@@ -9,7 +9,7 @@ Pipeline d'ENTRAÎNEMENT (historique 2022-2025).
 2. profils janvier-avril 2022, 2023, 2024, 2025 ;
 3. (option --choose-k) coude + Silhouette ;
 4. scaler + K-Means ;
-5. Isolation Forest par segment ;
+5. Isolation Forest (200 arbres, contamination 5 %) ;
 6. comparaison des modèles de prédiction + modèle final.
 
 Usage :
@@ -63,7 +63,7 @@ def main():
     print("\n[2/4] Scaler + K-Means")
     train_kmeans()
 
-    print("\n[3/4] Isolation Forest par segment")
+    print("\n[3/4] Isolation Forest (200 arbres, contamination 5 %)")
     train_anomaly_models()
 
     print("\n[4/4] Prédiction supervisée des segments")

@@ -11,7 +11,7 @@ Les données 2026 couvrent du 1er janvier au 18 mai 2026. Mai est incomplet, don
 | Profils d'entraînement | janvier–avril 2022, 2023, 2024, 2025 | un profil par contrat et par année |
 | Segmentation | K-Means (K = 5) | sur CONSO_TOTALE, CONSO_MOYENNE, CONSO_MAX, CONSO_MIN |
 | Prédiction du segment | septembre–décembre N → janvier–avril N+1 | apprentissage 2022→23 et 2023→24, test 2024→25, application 2025→26 |
-| Anomalies | Isolation Forest par segment | contamination 5 %, 200 arbres |
+| Anomalies | Isolation Forest (modèle global) | contamination 5 %, 200 arbres |
 
 Règles de préparation, identiques partout :
 - un seul réseau par modèle : électricité (`BASSE TENSION`, kWh) par défaut ; l'eau (m³) n'est pas mélangée ;
@@ -90,7 +90,7 @@ python run_2026.py
 
 - Le segment « de référence » 2026 est celui que le K-Means attribue au profil janvier–avril 2026. Ce n'est pas une vérité terrain externe.
 - La prédiction est comparée à deux baselines : la classe majoritaire et la persistance (« le segment ne change pas »). Un modèle n'apporte de la valeur que s'il fait mieux que la persistance.
-- Une anomalie est un profil inhabituel *par rapport aux contrats de son segment*. Ce n'est ni une fraude ni une erreur confirmée.
+- Une anomalie est un profil inhabituel par rapport à l'ensemble des contrats. Ce n'est ni une fraude ni une erreur confirmée. Le modèle global signale surtout les très gros consommateurs : c'est une limite connue.
 
 ## Confidentialité
 

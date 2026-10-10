@@ -144,11 +144,6 @@ RANDOM_STATE = 42
 ISOLATION_FOREST_TREES = 200
 ISOLATION_FOREST_CONTAMINATION = 0.05
 
-# Taille minimale d'un segment pour entraîner son Isolation Forest.
-# En dessous, les contrats du segment ne sont pas évalués : un modèle
-# global les signalerait presque tous, simplement parce qu'ils
-# consomment beaucoup plus que la majorité.
-MIN_SEGMENT_SIZE_FOR_IF = 50
 
 
 # ==========================================================

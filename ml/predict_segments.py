@@ -145,11 +145,6 @@ def candidate_models():
         "Logistic Regression": LogisticRegression(
             max_iter=2000, class_weight="balanced", random_state=RANDOM_STATE,
         ),
-        # Même modèle sans pondération : à comparer, car la pondération
-        # peut faire sur-prédire les petits segments.
-        "Logistic Regression (sans pondération)": LogisticRegression(
-            max_iter=2000, random_state=RANDOM_STATE,
-        ),
         "Linear SVM": LinearSVC(
             C=1.0, max_iter=5000, class_weight="balanced",
             random_state=RANDOM_STATE,

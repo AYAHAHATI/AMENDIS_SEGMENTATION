@@ -1,24 +1,21 @@
 """
 detect_anomalies.py
 
-Entraîne la détection des comportements atypiques sur les profils
-janvier-avril 2022-2025, avec un Isolation Forest PAR SEGMENT.
+Entraîne l'Isolation Forest sur les profils janvier-avril 2022-2025,
+comme décrit dans le rapport : un modèle global, 200 arbres,
+contamination de 5 %, random_state = 42.
 
-Pourquoi par segment ?
-Un modèle global, entraîné sur tous les contrats, signale surtout
-les plus gros consommateurs : ils sont "rares" uniquement parce
-qu'ils consomment beaucoup. Avec un modèle par segment, un contrat
-est atypique s'il s'écarte des contrats de son propre niveau de
-consommation.
+Les variables sont celles de la segmentation (MODEL_FEATURES),
+standardisées avec le scaler historique.
 
-Un segment trop petit (< MIN_SEGMENT_SIZE_FOR_IF profils) n'a pas
-de modèle : ses contrats sont marqués "non évalué".
+Limite connue (à discuter dans le rapport) : un modèle global signale
+en priorité les plus gros consommateurs, car ils sont rares.
+Le taux d'anomalies par segment est affiché pour le montrer.
 
 Sortie : models/isolation_forest_models.joblib
 """
 
 import joblib
-import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 
@@ -31,7 +28,6 @@ from config.config import (
     ANOMALY_MODEL_FILE,
     ISOLATION_FOREST_TREES,
     ISOLATION_FOREST_CONTAMINATION,
-    MIN_SEGMENT_SIZE_FOR_IF,
     RANDOM_STATE,
     ensure_dirs,
 )
@@ -48,48 +44,35 @@ def train_anomaly_models():
     scaler = joblib.load(SCALER_FILE)
     X = pd.DataFrame(scaler.transform(df[MODEL_FEATURES]), columns=MODEL_FEATURES)
 
-    models = {}
-    for cluster, index in df.groupby("CLUSTER").groups.items():
-        if len(index) >= MIN_SEGMENT_SIZE_FOR_IF:
-            models[int(cluster)] = IsolationForest(
-                n_estimators=ISOLATION_FOREST_TREES,
-                contamination=ISOLATION_FOREST_CONTAMINATION,
-                random_state=RANDOM_STATE,
-                n_jobs=-1,
-            ).fit(X.loc[index])
-            print(f"Cluster {cluster} : modèle entraîné ({len(index):,} profils)")
-        else:
-            print(
-                f"Cluster {cluster} : {len(index):,} profils "
-                f"(< {MIN_SEGMENT_SIZE_FOR_IF}) -> non évalué"
-            )
+    model = IsolationForest(
+        n_estimators=ISOLATION_FOREST_TREES,
+        contamination=ISOLATION_FOREST_CONTAMINATION,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+    ).fit(X)
+    joblib.dump(model, ANOMALY_MODEL_FILE)
 
-    joblib.dump(models, ANOMALY_MODEL_FILE)
-
-    scored = score_profiles(df, X, models)
+    scored = score_profiles(df, X, model)
+    print(
+        f"Isolation Forest : {ISOLATION_FOREST_TREES} arbres, "
+        f"contamination {ISOLATION_FOREST_CONTAMINATION:.0%}, "
+        f"{len(df):,} profils"
+    )
     print("\nAnomalies sur l'historique par segment :")
     print(summarize(scored).to_string())
     scored.to_csv(FINAL_DIR / "anomaly_scores_historical.csv", index=False)
-    print(f"Modèles enregistrés : {ANOMALY_MODEL_FILE}")
-    return models
+    print(f"Modèle enregistré : {ANOMALY_MODEL_FILE}")
+    return model
 
 
-def score_profiles(df, X_scaled, models):
+def score_profiles(df, X_scaled, model):
     """
-    EST_ANOMALIE : 1 = atypique, 0 = normal, vide = non évalué.
+    EST_ANOMALIE : 1 = atypique, 0 = normal.
     SCORE_ANOMALIE : plus il est bas, plus le profil est atypique.
     """
     result = df.copy()
-    result["EST_ANOMALIE"] = np.nan
-    result["SCORE_ANOMALIE"] = np.nan
-
-    for cluster, index in df.groupby("CLUSTER").groups.items():
-        model = models.get(int(cluster))
-        if model is None:
-            continue
-        Xc = X_scaled.loc[index]
-        result.loc[index, "EST_ANOMALIE"] = (model.predict(Xc) == -1).astype(int)
-        result.loc[index, "SCORE_ANOMALIE"] = model.decision_function(Xc)
+    result["EST_ANOMALIE"] = (model.predict(X_scaled) == -1).astype(int)
+    result["SCORE_ANOMALIE"] = model.decision_function(X_scaled)
     return result
 
 
