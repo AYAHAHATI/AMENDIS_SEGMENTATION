@@ -7,8 +7,7 @@ Fusion des données du projet Amendis.
 import pandas as pd
 from pathlib import Path
 
-# Racine du projet
-BASE_DIR = Path(__file__).resolve().parent.parent
+from config.config import INTERMEDIATE_DIR
 
 
 class DataMerger:
@@ -21,7 +20,7 @@ class DataMerger:
         Charge un DataFrame depuis data/intermediate.
         """
 
-        file_path = BASE_DIR / "data" / "intermediate" / filename
+        file_path = INTERMEDIATE_DIR / filename
 
         return pd.read_csv(file_path)
 
@@ -55,7 +54,7 @@ class DataMerger:
         Sauvegarde un DataFrame dans data/intermediate.
         """
 
-        output_path = BASE_DIR / "data" / "intermediate"
+        output_path = INTERMEDIATE_DIR
 
         output_path.mkdir(parents=True, exist_ok=True)
 

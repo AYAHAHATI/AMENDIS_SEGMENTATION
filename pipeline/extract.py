@@ -7,6 +7,7 @@ Extraction des données du projet Amendis.
 import pandas as pd
 from pathlib import Path
 
+from config.config import INTERMEDIATE_DIR
 from pipeline.history import detect_separator
 
 
@@ -216,11 +217,8 @@ class DataExtractor:
 
     def save_dataframe(self, df, filename):
 
-        output_path = (
-            BASE_DIR
-            / "data"
-            / "intermediate"
-        )
+        # Dossier du réseau traité (data/intermediate/<reseau>)
+        output_path = INTERMEDIATE_DIR
 
         output_path.mkdir(
             parents=True,

@@ -20,9 +20,28 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DATA_DIR = BASE_DIR / "data"
-INTERMEDIATE_DIR = DATA_DIR / "intermediate"
-FINAL_DIR = DATA_DIR / "final"
-MODELS_DIR = BASE_DIR / "models"
+
+
+# ==========================================================
+# RÉSEAU ANALYSÉ
+# ----------------------------------------------------------
+# L'électricité (kWh) et l'eau (m3) ne sont pas comparables :
+# un modèle est construit pour chaque réseau, séparément.
+# Électricité (défaut) : AMENDIS_RESEAU=BASSE TENSION
+# Eau                  : AMENDIS_RESEAU=EAU
+# Chaque réseau a ses propres dossiers de résultats et de modèles,
+# pour qu'un traitement n'écrase pas l'autre.
+# ==========================================================
+
+NETWORK = os.environ.get("AMENDIS_RESEAU", "BASSE TENSION").strip().upper()
+NETWORK_SLUG = {"BASSE TENSION": "electricite", "EAU": "eau"}.get(
+    NETWORK, NETWORK.lower().replace(" ", "_")
+)
+
+INTERMEDIATE_DIR = DATA_DIR / "intermediate" / NETWORK_SLUG
+FINAL_DIR = DATA_DIR / "final" / NETWORK_SLUG
+COMBINED_DIR = DATA_DIR / "final" / "tous_reseaux"
+MODELS_DIR = BASE_DIR / "models" / NETWORK_SLUG
 
 
 # ==========================================================
@@ -95,15 +114,6 @@ INCOMPLETE_CLUSTER = -1
 INCOMPLETE_LABEL = "Profil incomplet"
 
 
-# ==========================================================
-# RÉSEAU ANALYSÉ
-# ----------------------------------------------------------
-# L'électricité (kWh) et l'eau (m3) ne sont pas comparables :
-# un modèle est construit pour un seul réseau à la fois.
-# Pour l'eau : AMENDIS_RESEAU=EAU
-# ==========================================================
-
-NETWORK = os.environ.get("AMENDIS_RESEAU", "BASSE TENSION")
 
 
 # ==========================================================

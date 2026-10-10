@@ -14,7 +14,7 @@ Les données 2026 couvrent du 1er janvier au 18 mai 2026. Mai est incomplet, don
 | Anomalies | Isolation Forest (modèle global) | contamination 5 %, 200 arbres |
 
 Règles de préparation, identiques partout :
-- un seul réseau par modèle : électricité (`BASSE TENSION`, kWh) par défaut ; l'eau (m³) n'est pas mélangée ;
+- un modèle par réseau : électricité (`BASSE TENSION`, kWh) et eau (m³) ne sont jamais mélangées ; chaque réseau a ses dossiers `data/intermediate/<reseau>`, `data/final/<reseau>` et `models/<reseau>` (`electricite` ou `eau`) ;
 - les relevés sans volume ou sans date sont supprimés (aucune imputation) ;
 - les lignes d'un même contrat à la même date sont additionnées, car plusieurs registres apparaissent souvent, dont une ligne à 0 ;
 - un profil avec moins de 3 relevés sur la fenêtre est « Profil incomplet » et n'est pas segmenté ;
@@ -41,7 +41,21 @@ models/                 modèles entraînés (non versionnés)
 pip install -r requirements.txt
 python main.py --choose-k        # données complètes dans data/raw + étude du nombre de clusters
 python main.py --sample          # test rapide sur data/sample
-AMENDIS_RESEAU=EAU python main.py  # modèle séparé pour le réseau eau
+```
+
+Pour le réseau eau (Windows, cmd) :
+
+```bat
+set AMENDIS_RESEAU=EAU
+python -u main.py
+python -u run_2026.py
+set AMENDIS_RESEAU=
+```
+
+Puis, une fois les deux réseaux traités :
+
+```bash
+python combine_reseaux.py   # data/final/tous_reseaux/ pour Power BI
 ```
 
 Fichiers attendus dans `data/raw/` : `HIST_CSO_STG22_24.csv`, `HIST_CSO.csv`, `HIST_CSO_STG2026.txt`.
@@ -76,7 +90,9 @@ Sans Docker, les mêmes 9 étapes s'exécutent avec Python seul :
 python run_2026.py
 ```
 
-### 3. Fichiers pour Power BI (`data/final/`)
+### 3. Fichiers pour Power BI (`data/final/<reseau>/` et `data/final/tous_reseaux/`)
+
+Dans les fichiers combinés, la colonne `RESEAU` indique le réseau : filtrer par réseau, sans additionner kWh et m³.
 
 | Fichier | Contenu |
 |---|---|

@@ -55,6 +55,7 @@ from config.config import (
     TRAIN_TRANSITIONS,
     TEST_TRANSITIONS,
     APPLICATION_YEAR,
+    NETWORK,
     RANDOM_STATE,
     window_dates,
     ensure_dirs,
@@ -266,6 +267,7 @@ def predict_segments_2026(reference_file="clients_cluster_2026.csv"):
         metrics(y_true, data["SEGMENT_PREDIT_2026"], model_name),
     ])
     results.insert(1, "CONTRATS_EVALUES", len(data))
+    results.insert(0, "RESEAU", NETWORK)
 
     print(f"\nRÉSULTATS 2026 (référence = K-Means janvier-avril 2026)")
     print(results.round(4).to_string(index=False))
@@ -278,7 +280,8 @@ def predict_segments_2026(reference_file="clients_cluster_2026.csv"):
     print(confusion.to_string())
 
     FINAL_DIR.mkdir(parents=True, exist_ok=True)
-    data[[ID_COLUMN, "SEGMENT_SEP_DEC_2025", "SEGMENT_PREDIT_2026",
+    data["RESEAU"] = NETWORK
+    data[[ID_COLUMN, "RESEAU", "SEGMENT_SEP_DEC_2025", "SEGMENT_PREDIT_2026",
           "SEGMENT_REFERENCE_2026", "CORRECT"]].to_csv(
         FINAL_DIR / "predictions_segments_2026.csv", index=False
     )

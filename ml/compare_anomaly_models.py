@@ -31,7 +31,9 @@ from sklearn.svm import OneClassSVM
 # Profils janvier-avril 2022-2025 (produits par main.py).
 # LOF et One-Class SVM ont un coût quadratique : la comparaison est
 # faite sur un échantillon aléatoire identique pour les trois modèles.
-INPUT_FILE = "data/intermediate/clients_cluster_k5.csv"
+from config.config import INTERMEDIATE_DIR, FINAL_DIR, N_CLUSTERS
+
+INPUT_FILE = INTERMEDIATE_DIR / f"clients_cluster_k{N_CLUSTERS}.csv"
 SAMPLE_SIZE = 20_000
 
 df = pd.read_csv(INPUT_FILE)
@@ -268,12 +270,12 @@ results["SCORE_ONE_CLASS_SVM"] = (
 # ==========================================================
 
 OUTPUT_COMPARISON = (
-    "data/final/"
+    FINAL_DIR /
     "anomaly_models_comparison.csv"
 )
 
 OUTPUT_SCORES = (
-    "data/final/"
+    FINAL_DIR /
     "anomaly_comparison_scores.csv"
 )
 

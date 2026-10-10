@@ -7,6 +7,8 @@ x-airflow-common:
   environment:
     &airflow-common-env
     PYTHONPATH: /opt/airflow
+    # Réseau traité par le DAG : BASSE TENSION (défaut) ou EAU
+    AMENDIS_RESEAU: ${AMENDIS_RESEAU:-BASSE TENSION}
 
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
 
