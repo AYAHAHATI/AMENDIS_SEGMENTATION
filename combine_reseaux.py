@@ -98,6 +98,12 @@ def export_legacy(combined):
     for column in ("ANOMALIE", "EST_ANOMALIE", "CLUSTER", "NB_RELEVES"):
         anomalies[column] = anomalies[column].astype("Int64")
     anomalies = ordered(anomalies, LEGACY_ANOMALY_COLUMNS)
+    # Colonnes de l'ancien fichier historique (anomaly_scores_historical),
+    # utilisées par certains visuels : True/False et score
+    anomalies["ANOMALIE_ISOLATION_FOREST"] = anomalies["EST_ANOMALIE"].map(
+        {1: "True", 0: "False"}
+    )
+    anomalies["ANOMALY_SCORE"] = anomalies["SCORE_ANOMALIE"]
     anomalies.to_csv(LEGACY_DIR / "anomaly_scores_2026.csv", index=False)
 
     predictions = combined["predictions_segments_2026.csv"].rename(
