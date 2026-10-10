@@ -55,6 +55,7 @@ def load_history(chunksize=500_000):
         if NETWORK_COLUMN in header:
             usecols.append(NETWORK_COLUMN)
 
+        lines_read = 0
         for chunk in pd.read_csv(
             path,
             sep=sep,
@@ -64,6 +65,8 @@ def load_history(chunksize=500_000):
             encoding_errors="replace",
             low_memory=False,
         ):
+            lines_read += len(chunk)
+            print(f"  ... {lines_read:,} lignes lues", flush=True)
             chunk = clean_consumption(
                 chunk,
                 id_column=id_column,
