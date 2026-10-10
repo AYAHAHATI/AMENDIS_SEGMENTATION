@@ -55,7 +55,7 @@ set AMENDIS_RESEAU=
 Puis, une fois les deux réseaux traités :
 
 ```bash
-python combine_reseaux.py   # data/final/tous_reseaux/ pour Power BI
+python combine_reseaux.py   # data/final/tous_reseaux/ + fichiers au format de l'ancien Power BI dans data/final/
 ```
 
 Fichiers attendus dans `data/raw/` : `HIST_CSO_STG22_24.csv`, `HIST_CSO.csv`, `HIST_CSO_STG2026.txt`.
