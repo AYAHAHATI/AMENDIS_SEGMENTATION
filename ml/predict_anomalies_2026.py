@@ -1,8 +1,9 @@
 """
 predict_anomalies_2026.py
 
-Applique l'Isolation Forest historique (sans réentraînement)
-aux profils janvier-avril 2026.
+Applique les Isolation Forest historiques (un par segment, sans
+réentraînement) aux profils janvier-avril 2026 : chaque contrat est
+évalué par le modèle de son segment 2026.
 
 Une "anomalie" est un profil signalé par le modèle selon le seuil
 de contamination appris sur l'historique ; ce n'est ni une fraude
@@ -30,12 +31,12 @@ def predict_anomalies_2026(
     incomplete = df[df["CLUSTER"] < 0]
 
     scaler = joblib.load(SCALER_FILE)
-    model = joblib.load(ANOMALY_MODEL_FILE)
+    models = joblib.load(ANOMALY_MODEL_FILE)
     X = pd.DataFrame(
         scaler.transform(complete[MODEL_FEATURES]), columns=MODEL_FEATURES
     )
 
-    scored = score_profiles(complete, X, model)
+    scored = score_profiles(complete, X, models)
     # Profils incomplets : non évalués
     result = pd.concat([scored, incomplete], ignore_index=True)
 

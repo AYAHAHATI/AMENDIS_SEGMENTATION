@@ -154,6 +154,12 @@ RANDOM_STATE = 42
 ISOLATION_FOREST_TREES = 200
 ISOLATION_FOREST_CONTAMINATION = 0.05
 
+# Un Isolation Forest est entraîné PAR SEGMENT. Un segment de moins
+# de MIN_SEGMENT_SIZE_FOR_IF profils historiques n'a pas de modèle :
+# ses contrats sont "non évalués". Avec les données actuelles, le plus
+# petit segment compte 42 profils (Très forte, eau) : tous sont évalués.
+MIN_SEGMENT_SIZE_FOR_IF = 30
+
 
 
 # ==========================================================
