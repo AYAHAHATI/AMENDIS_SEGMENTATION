@@ -104,7 +104,7 @@ services:
 
 
   # ==========================================================
-  # ENTREPÔT DE DONNÉES AMENDIS (PostgreSQL 16)
+  # ENTREPÔT DE DONNÉES AMENDIS (PostgreSQL)
   # ----------------------------------------------------------
   # Base séparée de celle d'Airflow (qui ne contient que l'état
   # d'Airflow). Accessible depuis le PC sur localhost:5433
@@ -114,7 +114,10 @@ services:
 
   amendis-dwh:
 
-    image: postgres:16
+    # Même image que la base d'Airflow : déjà présente sur le poste,
+    # aucun téléchargement nécessaire. Une autre version peut être
+    # choisie avec la variable AMENDIS_DWH_IMAGE (ex. postgres:16).
+    image: ${AMENDIS_DWH_IMAGE:-postgres:13}
 
     environment:
       POSTGRES_USER: amendis

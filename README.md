@@ -76,7 +76,7 @@ Schéma en étoile (`pipeline/sql/schema.sql`), alimenté à partir de la couche
 
 - Granularité de `fait_profil_consommation` : un contrat × une période janvier–avril (historique 2022–2025 et 2026).
 - Chargement : staging (COPY) puis SQL vers les dimensions et les faits, en **une transaction** (une panne ne modifie rien), idempotent (relancer = même contenu), suivi d'une **réconciliation** gold ↔ entrepôt.
-- Démarrer l'entrepôt seul : `docker compose up -d amendis-dwh` (PostgreSQL 16, `localhost:5433`, base `amendis_dwh`, utilisateur/mot de passe `amendis`).
+- Démarrer l'entrepôt seul : `docker compose up -d amendis-dwh` (PostgreSQL 13, même image qu'Airflow, `localhost:5433`, base `amendis_dwh`, utilisateur/mot de passe `amendis`).
 - Commandes : `python -m pipeline.warehouse load` (réseau courant), `reconcile`, `status`.
 - `run_2026.py` et le DAG se terminent par `load_dwh_2026`.
 - Exemples de requêtes SQL : `pipeline/sql/exemples.sql`.
