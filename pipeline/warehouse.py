@@ -189,19 +189,23 @@ def load_network(network=NETWORK):
     segments = prepare_segments(network)
     predictions = read_gold("predictions_segments_2026", network)
     metrics = prepare_metrics(network)
-    print(f"  gold lu : {len(profiles):,} profils, {len(predictions):,} prédictions")
+    print(f"  gold lu : {len(profiles):,} profils, {len(predictions):,} prédictions", flush=True)
 
     connection = connect()
     try:
         with connection:                       # transaction : tout ou rien
             with connection.cursor() as cursor:
-                create_schema(cursor)
-                load_periods(cursor)
-                load_segments(cursor, reseau_id, segments)
-                n_contracts = load_contracts(cursor, reseau_id, profiles, predictions)
-                n_profiles = load_profile_facts(cursor, reseau_id, profiles)
-                n_predictions = load_prediction_facts(cursor, reseau_id, predictions)
-                load_metrics(cursor, reseau_id, metrics)
+                step("schéma (tables et vues)", create_schema, cursor)
+                step("dim_periode", load_periods, cursor)
+                step("dim_segment", load_segments, cursor, reseau_id, segments)
+                n_contracts = step("dim_contrat", load_contracts,
+                                   cursor, reseau_id, profiles, predictions)
+                n_profiles = step(f"fait_profil_consommation ({len(profiles):,} lignes)",
+                                  load_profile_facts, cursor, reseau_id, profiles)
+                n_predictions = step(f"fait_prediction_segment ({len(predictions):,} lignes)",
+                                     load_prediction_facts, cursor, reseau_id, predictions)
+                step("metriques_modeles", load_metrics, cursor, reseau_id, metrics)
+                print("  validation de la transaction (COMMIT)...", flush=True)
                 duration = round(time.time() - started, 1)
                 cursor.execute(
                     "INSERT INTO journal_chargements "
@@ -217,6 +221,15 @@ def load_network(network=NETWORK):
         f"{n_profiles:,} faits de profil, {n_predictions:,} faits de prédiction"
     )
     return {"contrats": n_contracts, "profils": n_profiles, "predictions": n_predictions}
+
+
+def step(label, function, *args):
+    """Exécute une étape du chargement en affichant sa durée."""
+    print(f"  {label} ...", end=" ", flush=True)
+    started = time.time()
+    result = function(*args)
+    print(f"{time.time() - started:.1f} s", flush=True)
+    return result
 
 
 def load_periods(cursor):
