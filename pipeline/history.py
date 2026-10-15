@@ -32,10 +32,42 @@ def detect_separator(path):
     return "\t" if header.count("\t") > header.count(",") else ","
 
 
-def load_history(chunksize=500_000):
+def load_history():
     """
-    Charge les relevés historiques 2022-2025 (un seul réseau),
-    nettoyés avec les mêmes règles que les données 2026.
+    Charge les relevés historiques 2022-2025 d'un réseau depuis la
+    couche SILVER du data lake (Parquet, partitionné par réseau/année).
+
+    Si le silver n'existe pas encore, il est construit une fois à partir
+    des fichiers sources (bronze puis silver). Les exécutions suivantes
+    ne relisent plus les gros CSV.
+    """
+    from pipeline.lake import build_history_lake, read_silver, silver_years
+
+    first = min(start for _, _, start, _ in HIST_FILES)
+    last = max(end for _, _, _, end in HIST_FILES)
+    needed = set(range(int(first[:4]), int(last[:4]) + 1))
+
+    if not needed.issubset(silver_years()):
+        print("Silver historique absent : construction bronze -> silver")
+        build_history_lake()
+
+    df = read_silver(start_date=first, end_date=last)
+    if df.empty:
+        raise ValueError("Aucun relevé historique pour ce réseau.")
+
+    print(
+        f"\nRelevés historiques (silver) : {len(df):,} | "
+        f"contrats : {df[ID_COLUMN].nunique():,} | "
+        f"période : {df[DATE_COLUMN].min().date()} -> "
+        f"{df[DATE_COLUMN].max().date()}"
+    )
+    return df
+
+
+def load_history_from_csv(chunksize=500_000):
+    """
+    Ancienne lecture directe des CSV (avant le data lake), conservée
+    pour comparaison et pour le test de non-régression.
     """
     pieces = []
 

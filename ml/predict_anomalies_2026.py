@@ -15,6 +15,7 @@ import pandas as pd
 
 from config.config import FINAL_DIR, MODEL_FEATURES, SCALER_FILE, ANOMALY_MODEL_FILE
 from ml.detect_anomalies import score_profiles, summarize
+from pipeline.lake import write_gold
 
 
 def predict_anomalies_2026(
@@ -50,6 +51,7 @@ def predict_anomalies_2026(
 
     output_path = FINAL_DIR / output_file
     result.to_csv(output_path, index=False)
+    write_gold(result, "anomalies_2026")
     print(f"Fichier enregistré : {output_path}")
     return result
 

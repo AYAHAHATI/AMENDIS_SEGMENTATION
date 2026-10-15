@@ -31,7 +31,31 @@ experiments/            scripts exploratoires de la version précédente (non ma
 data/raw/               données Amendis complètes (non versionnées)
 data/sample/            échantillons pour tester rapidement
 models/                 modèles entraînés (non versionnés)
+data/lake/              data lake Parquet bronze / silver / gold (non versionné, regénérable)
 ```
+
+## Data lake (couches bronze / silver / gold)
+
+```
+data/raw/*.csv, *.txt                       fichiers sources
+   │  pipeline.lake.ingest_bronze           copie fidèle, toutes colonnes (texte)
+   ▼
+data/lake/bronze/<fichier>/<fichier>.parquet   (+ _ingestion.json : lignes, tailles, durée)
+   │  build_silver_history / build_silver_2026   nettoyage (mêmes règles qu'avant)
+   ▼
+data/lake/silver/releves/reseau=<réseau>/annee=<année>/part-0.parquet
+   │  read_silver (réseau + fenêtre) -> profils, modèles
+   ▼
+data/lake/gold/<table>/reseau=<réseau>/part-0.parquet
+   profils_entrainement, clients_segmentes_2026, anomalies_2026,
+   predictions_segments_2026, metriques_prediction_2026
+```
+
+- Le premier `python main.py` construit le bronze et le silver de l'historique ; les exécutions suivantes lisent directement le silver (plus de relecture des gros CSV).
+- Commandes : `python -m pipeline.lake history` (forcer : `history --force`), `python -m pipeline.lake 2026`, `python -m pipeline.lake status`.
+- `python scripts/benchmark_formats.py` compare la taille et le temps de lecture CSV / Parquet.
+- Les CSV de `data/final/` (lus par Power BI) sont toujours produits, à l'identique.
+- Test sur échantillons : `python scripts/create_sample_2026.py` crée un faux fichier 2026 (relevés 2025 décalés d'un an), puis `AMENDIS_DATA_MODE=sample python run_2026.py`.
 
 ## Utilisation
 

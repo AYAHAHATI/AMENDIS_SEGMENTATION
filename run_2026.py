@@ -7,6 +7,12 @@ Exécute le traitement 2026 SANS Airflow, avec exactement les mêmes
 Utile pour tester ou produire les résultats quand Docker/Airflow
 n'est pas disponible. Pré-requis : `python main.py` (modèles entraînés).
 
+Les deux premières étapes alimentent le data lake :
+- extract_2026   : fichier 2026 -> couche BRONZE (Parquet, copie fidèle)
+- transform_2026 : BRONZE -> couche SILVER (relevés nettoyés,
+                   partitionnés par réseau et par année)
+- aggregate_2026 : SILVER (fenêtre janvier-avril) -> profils par contrat
+
 Usage :
     python run_2026.py
 """
@@ -14,8 +20,7 @@ Usage :
 import time
 
 from config.config import APPLICATION_YEAR, FILE_2026, SEGMENT_WINDOW, window_dates
-from pipeline.extract import DataExtractor
-from pipeline.transform import DataTransformer
+from pipeline.lake import ingest_bronze, build_silver_2026
 from pipeline.aggregate import DataAggregator
 from pipeline.feature_engineering import FeatureEngineer
 from pipeline.scaler import DataScaler
@@ -25,24 +30,15 @@ from ml.predict_segments import predict_segments_2026
 from ml.predict_anomalies_2026 import predict_anomalies_2026
 
 
-def extract_2026():
-    extractor = DataExtractor()
-    extractor.save_dataframe(extractor.read_txt_2026(FILE_2026), "hist_2026_extracted.csv")
-
-
-def transform_2026():
+def aggregate_2026():
     start, end = window_dates(APPLICATION_YEAR, SEGMENT_WINDOW)
-    DataTransformer().run(
-        "hist_2026_extracted.csv", "hist_2026_clean.csv",
-        start_date=start, end_date=end,
-    )
+    DataAggregator().run_from_silver(start, end, "hist_2026_client.csv")
 
 
 STEPS = [
-    ("extract_2026", extract_2026),
-    ("transform_2026", transform_2026),
-    ("aggregate_2026", lambda: DataAggregator().run_consumption(
-        "hist_2026_clean.csv", "hist_2026_client.csv")),
+    ("extract_2026", lambda: ingest_bronze(FILE_2026)),
+    ("transform_2026", build_silver_2026),
+    ("aggregate_2026", aggregate_2026),
     ("feature_engineering_2026", lambda: FeatureEngineer().run(
         "hist_2026_client.csv", "features_2026.csv")),
     ("scaler_2026", lambda: DataScaler().run_test(
@@ -63,7 +59,7 @@ def main():
         step()
         print(f"-> {name} terminé en {time.time() - started:.1f} s")
 
-    print("\nTRAITEMENT 2026 TERMINÉ : résultats dans data/final/")
+    print("\nTRAITEMENT 2026 TERMINÉ : résultats dans data/final/ et data/lake/gold/")
 
 
 if __name__ == "__main__":

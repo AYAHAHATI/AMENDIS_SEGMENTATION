@@ -63,6 +63,28 @@ class DataAggregator:
         df.to_csv(file_path, index=False)
         print(f"Fichier enregistré : {file_path} ({len(df):,} lignes)")
 
+    def run_from_silver(self, start_date, end_date, output_file):
+        """
+        Profils d'une fenêtre construits à partir de la couche silver
+        (réseau courant, seules les partitions utiles sont lues).
+        """
+        from pipeline.lake import read_silver
+
+        readings = read_silver(start_date=start_date, end_date=end_date)
+        if readings.empty:
+            raise ValueError(
+                f"Aucun relevé silver entre {start_date} et {end_date} : "
+                "vérifier le réseau et la fenêtre de dates."
+            )
+        print(
+            f"Relevés silver {start_date} -> {end_date} : {len(readings):,} "
+            f"({readings[DATE_COLUMN].min().date()} -> "
+            f"{readings[DATE_COLUMN].max().date()})"
+        )
+        profile = self.aggregate_consumption(readings)
+        self.save_dataframe(profile, output_file)
+        return profile
+
     def run_consumption(self, input_file, output_file):
         df = self.load_dataframe(input_file)
         profile = self.aggregate_consumption(df)

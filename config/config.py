@@ -38,6 +38,32 @@ NETWORK_SLUG = {"BASSE TENSION": "electricite", "EAU": "eau"}.get(
     NETWORK, NETWORK.lower().replace(" ", "_")
 )
 
+# ==========================================================
+# DATA LAKE : COUCHES BRONZE / SILVER / GOLD (format Parquet)
+# ----------------------------------------------------------
+# bronze : copie fidèle des fichiers sources (toutes colonnes, texte),
+#          jamais modifiée -> on peut toujours tout recalculer.
+# silver : relevés nettoyés et typés, partitionnés par réseau et année
+#          (silver/releves/reseau=eau/annee=2024/...).
+# gold   : tables prêtes à l'usage (profils, segments, anomalies,
+#          prédictions), une partition par réseau.
+# ==========================================================
+
+LAKE_DIR = DATA_DIR / "lake"
+BRONZE_DIR = LAKE_DIR / "bronze"
+SILVER_DIR = LAKE_DIR / "silver"
+GOLD_DIR = LAKE_DIR / "gold"
+SILVER_READINGS_DIR = SILVER_DIR / "releves"
+
+NETWORK_SLUGS = {"BASSE TENSION": "electricite", "EAU": "eau"}
+
+
+def network_slug(network):
+    """Nom court d'un réseau, utilisé dans les dossiers et partitions."""
+    network = str(network).strip().upper()
+    return NETWORK_SLUGS.get(network, network.lower().replace(" ", "_"))
+
+
 INTERMEDIATE_DIR = DATA_DIR / "intermediate" / NETWORK_SLUG
 FINAL_DIR = DATA_DIR / "final" / NETWORK_SLUG
 COMBINED_DIR = DATA_DIR / "final" / "tous_reseaux"
@@ -73,7 +99,8 @@ else:
 
 FILE_2026 = os.environ.get(
     "AMENDIS_FILE_2026",
-    "HIST_CSO_STG2026.txt"
+    "HIST_CSO_STG2026_SAMPLE.txt" if DATA_MODE == "sample"
+    else "HIST_CSO_STG2026.txt"
 )
 
 

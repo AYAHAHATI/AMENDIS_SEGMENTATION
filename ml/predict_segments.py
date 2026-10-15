@@ -62,6 +62,7 @@ from config.config import (
 )
 from ml.labels import load_labels
 from pipeline.history import load_history, aggregate_window
+from pipeline.lake import write_gold
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -281,11 +282,12 @@ def predict_segments_2026(reference_file="clients_cluster_2026.csv"):
 
     FINAL_DIR.mkdir(parents=True, exist_ok=True)
     data["RESEAU"] = NETWORK
-    data[[ID_COLUMN, "RESEAU", "SEGMENT_SEP_DEC_2025", "SEGMENT_PREDIT_2026",
-          "SEGMENT_REFERENCE_2026", "CORRECT"]].to_csv(
-        FINAL_DIR / "predictions_segments_2026.csv", index=False
-    )
+    predictions = data[[ID_COLUMN, "RESEAU", "SEGMENT_SEP_DEC_2025",
+                        "SEGMENT_PREDIT_2026", "SEGMENT_REFERENCE_2026", "CORRECT"]]
+    predictions.to_csv(FINAL_DIR / "predictions_segments_2026.csv", index=False)
     results.to_csv(FINAL_DIR / "metriques_prediction_2026.csv", index=False)
+    write_gold(predictions, "predictions_segments_2026")
+    write_gold(results, "metriques_prediction_2026")
     confusion.to_csv(FINAL_DIR / "matrice_confusion_2026.csv")
     return data
 

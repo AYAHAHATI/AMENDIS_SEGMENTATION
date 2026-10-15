@@ -50,3 +50,7 @@ models/
 *.joblib
 # Résultats générés
 anomaly_scores_2026.csv
+
+# Data lake (bronze / silver / gold) : regénérable à partir des sources
+data/lake/
+data/sample/HIST_CSO_STG2026_SAMPLE.txt

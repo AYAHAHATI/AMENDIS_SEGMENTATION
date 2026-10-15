@@ -40,10 +40,13 @@ def clean_consumption(
     start_date=None,
     end_date=None,
     verbose=True,
+    keep_network=False,
 ):
     """
     Nettoie un DataFrame de relevés et renvoie les colonnes utiles :
-    NUM_CTA_HASH, VOL_CONSO, DAT_PRE_RLV_CSO.
+    NUM_CTA_HASH, VOL_CONSO, DAT_PRE_RLV_CSO
+    (+ TYPE_RESEAUX si keep_network=True, utilisé pour la couche silver,
+    qui garde les deux réseaux avec network=None).
     """
     stats = {"lignes_initiales": len(df)}
 
@@ -86,7 +89,13 @@ def clean_consumption(
         for step, value in stats.items():
             print(f"  {step:<28}: {value:,}")
 
-    return df[[ID_COLUMN, VOLUME_COLUMN, DATE_COLUMN]].reset_index(drop=True)
+    columns = [ID_COLUMN, VOLUME_COLUMN, DATE_COLUMN]
+    if keep_network:
+        df = df.assign(**{
+            NETWORK_COLUMN: df[NETWORK_COLUMN].astype(str).str.strip().str.upper()
+        })
+        columns.append(NETWORK_COLUMN)
+    return df[columns].reset_index(drop=True)
 
 
 class DataTransformer:

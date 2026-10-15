@@ -10,6 +10,11 @@ Les données 2026 vont du 1er janvier au 18 mai 2026. Mai étant
 incomplet, seule la fenêtre janvier-avril est conservée, comme
 pour les profils d'entraînement.
 
+Data lake (data/lake/) :
+- extract_2026   : fichier source -> BRONZE (Parquet, copie fidèle)
+- transform_2026 : BRONZE -> SILVER (nettoyé, partitionné réseau/année)
+- create_final, predict_segments, detect_anomalies -> GOLD
+
 Enchaînement :
 extract -> transform -> aggregate -> feature_engineering -> scaler
 -> predict (K-Means) -> create_final -> [predict_segments, detect_anomalies]
@@ -22,29 +27,27 @@ from airflow.operators.python import PythonOperator
 
 
 def extract_2026_task():
+    """Fichier 2026 -> couche BRONZE (Parquet, copie fidèle)."""
     from config.config import FILE_2026
-    from pipeline.extract import DataExtractor
+    from pipeline.lake import ingest_bronze
 
-    extractor = DataExtractor()
-    df = extractor.read_txt_2026(FILE_2026)
-    extractor.save_dataframe(df, "hist_2026_extracted.csv")
+    ingest_bronze(FILE_2026)
 
 
 def transform_2026_task():
-    from config.config import APPLICATION_YEAR, SEGMENT_WINDOW, window_dates
-    from pipeline.transform import DataTransformer
+    """BRONZE -> SILVER : relevés nettoyés, partitionnés par réseau et année."""
+    from pipeline.lake import build_silver_2026
 
-    start, end = window_dates(APPLICATION_YEAR, SEGMENT_WINDOW)
-    DataTransformer().run(
-        "hist_2026_extracted.csv", "hist_2026_clean.csv",
-        start_date=start, end_date=end,
-    )
+    build_silver_2026()
 
 
 def aggregate_2026_task():
+    """SILVER (janvier-avril 2026, réseau traité) -> profils par contrat."""
+    from config.config import APPLICATION_YEAR, SEGMENT_WINDOW, window_dates
     from pipeline.aggregate import DataAggregator
 
-    DataAggregator().run_consumption("hist_2026_clean.csv", "hist_2026_client.csv")
+    start, end = window_dates(APPLICATION_YEAR, SEGMENT_WINDOW)
+    DataAggregator().run_from_silver(start, end, "hist_2026_client.csv")
 
 
 def feature_engineering_2026_task():

@@ -8,6 +8,7 @@ Dataset final 2026 pour Power BI : profil de consommation
 import pandas as pd
 
 from config.config import INTERMEDIATE_DIR, FINAL_DIR, ID_COLUMN, NETWORK
+from pipeline.lake import write_gold
 
 
 def create_final_dataset(
@@ -34,7 +35,8 @@ def create_final_dataset(
     final.insert(1, "RESEAU", NETWORK)
 
     output_path = FINAL_DIR / output_file
-    final.to_csv(output_path, index=False)
+    final.to_csv(output_path, index=False)   # lu par Power BI
+    write_gold(final, "clients_segmentes_2026")
 
     print(final["LIBELLE_CLUSTER"].value_counts().to_string())
     print(f"Fichier enregistré : {output_path} ({len(final):,} contrats)")

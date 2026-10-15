@@ -23,6 +23,7 @@ from config.config import (
     ensure_dirs,
 )
 from pipeline.history import load_history, aggregate_window
+from pipeline.lake import write_gold
 
 OUTPUT_FILE = INTERMEDIATE_DIR / "training_windows.csv"
 
@@ -42,6 +43,7 @@ def build_training_windows(history=None):
 
     result = pd.concat(profiles, ignore_index=True)
     result.to_csv(OUTPUT_FILE, index=False)
+    write_gold(result, "profils_entrainement")
 
     print(f"\nProfils d'entraînement : {len(result):,}")
     print(result.drop(columns=["ANNEE"]).describe().round(2))
