@@ -12,10 +12,11 @@ GOLD du data lake, selon un schéma en étoile (pipeline/sql/schema.sql) :
 
 Démarche (ELT classique) :
 1. le schéma est créé s'il n'existe pas (script SQL idempotent) ;
-2. les données gold sont copiées dans des tables de STAGING temporaires
-   (commande COPY de PostgreSQL : très rapide) ;
-3. des requêtes SQL remplissent les dimensions puis les faits, en
-   remplaçant les identifiants longs par des clés de substitution ;
+2. les dimensions sont mises à jour (les nouveaux contrats passent par
+   une table de STAGING temporaire chargée avec COPY) ;
+3. les identifiants longs sont remplacés par les clés de substitution
+   des dimensions, puis les faits sont chargés en masse avec COPY
+   (commande PostgreSQL très rapide) ;
 4. tout se passe dans UNE TRANSACTION : si une étape échoue, rien n'est
    modifié dans l'entrepôt (l'ancienne version reste intacte).
 
@@ -277,84 +278,96 @@ def load_contracts(cursor, reseau_id, profiles, predictions):
            ON CONFLICT (num_cta_hash, reseau_id) DO NOTHING""",
         (reseau_id,),
     )
+    cursor.execute("ANALYZE dim_contrat")   # statistiques à jour pour la suite
     return len(hashes)
 
 
-def load_profile_facts(cursor, reseau_id, profiles):
-    """fait_profil_consommation : remplace les faits du réseau."""
-    cursor.execute("DELETE FROM fait_profil_consommation WHERE reseau_id = %s", (reseau_id,))
-    cursor.execute(
-        """CREATE TEMP TABLE stg_profil (
-               num_cta_hash TEXT, annee SMALLINT, cluster SMALLINT,
-               conso_totale DOUBLE PRECISION, conso_moyenne DOUBLE PRECISION,
-               conso_max DOUBLE PRECISION, conso_min DOUBLE PRECISION,
-               nb_releves SMALLINT, profil_complet BOOLEAN,
-               est_anomalie BOOLEAN, score_anomalie DOUBLE PRECISION
-           ) ON COMMIT DROP"""
+def key_map(cursor, sql, params, key, value):
+    """Lit une correspondance clé naturelle -> clé de substitution."""
+    cursor.execute(sql, params)
+    return pd.DataFrame(cursor.fetchall(), columns=[key, value])
+
+
+def contract_keys(cursor, reseau_id):
+    return key_map(
+        cursor, "SELECT num_cta_hash, contrat_id FROM dim_contrat WHERE reseau_id = %s",
+        (reseau_id,), ID_COLUMN, "contrat_id",
     )
-    staging = profiles[[ID_COLUMN, "ANNEE", "CLUSTER"] + MEASURES + [
-        "NB_RELEVES", "PROFIL_COMPLET", "EST_ANOMALIE", "SCORE_ANOMALIE"]]
-    staging.columns = [
-        "num_cta_hash", "annee", "cluster", "conso_totale", "conso_moyenne",
-        "conso_max", "conso_min", "nb_releves", "profil_complet",
+
+
+def segment_keys(cursor, reseau_id, by):
+    return key_map(
+        cursor, f"SELECT {by}, segment_id FROM dim_segment WHERE reseau_id = %s",
+        (reseau_id,), by, "segment_id",
+    )
+
+
+def resolve(df, keys, on, column=None):
+    """
+    Remplace une clé naturelle (hash du contrat, numéro ou libellé de
+    segment) par la clé de substitution de la dimension. Toute ligne sans
+    correspondance arrête le chargement.
+    """
+    resolved = df.merge(keys, left_on=on, right_on=keys.columns[0], how="left",
+                        validate="many_to_one")
+    target = column or keys.columns[1]
+    if target != keys.columns[1]:
+        resolved = resolved.rename(columns={keys.columns[1]: target})
+    missing = int(resolved[target].isna().sum())
+    if missing:
+        raise ValueError(f"{missing} lignes sans correspondance pour {on}.")
+    if keys.columns[0] != on and keys.columns[0] in resolved.columns:
+        resolved = resolved.drop(columns=keys.columns[0])
+    resolved[target] = resolved[target].astype(int)
+    return resolved
+
+
+def load_profile_facts(cursor, reseau_id, profiles):
+    """
+    fait_profil_consommation : remplace les faits du réseau.
+
+    Les clés de substitution (contrat_id, segment_id) sont résolues en
+    Python à partir des dimensions, puis les faits sont chargés en masse
+    avec COPY. Cette méthode a un temps d'exécution prévisible, quelle que
+    soit la version de PostgreSQL (une jointure SQL sur une table tout juste
+    remplie, sans statistiques, peut être très lente).
+    """
+    cursor.execute("DELETE FROM fait_profil_consommation WHERE reseau_id = %s", (reseau_id,))
+
+    facts = resolve(profiles, contract_keys(cursor, reseau_id), ID_COLUMN)
+    facts = resolve(facts, segment_keys(cursor, reseau_id, "cluster"), "CLUSTER")
+    facts["periode_id"] = facts["ANNEE"] * 100 + int(SEGMENT_WINDOW[0][:2])
+    facts["reseau_id"] = reseau_id
+    facts = facts[["contrat_id", "periode_id", "reseau_id", "segment_id"] + MEASURES
+                  + ["NB_RELEVES", "PROFIL_COMPLET", "EST_ANOMALIE", "SCORE_ANOMALIE"]]
+    facts.columns = [
+        "contrat_id", "periode_id", "reseau_id", "segment_id", "conso_totale",
+        "conso_moyenne", "conso_max", "conso_min", "nb_releves", "profil_complet",
         "est_anomalie", "score_anomalie",
     ]
-    copy_dataframe(cursor, staging, "stg_profil")
-
-    cursor.execute(
-        """INSERT INTO fait_profil_consommation
-               (contrat_id, periode_id, reseau_id, segment_id,
-                conso_totale, conso_moyenne, conso_max, conso_min,
-                nb_releves, profil_complet, est_anomalie, score_anomalie)
-           SELECT c.contrat_id, s.annee * 100 + %s, %s, g.segment_id,
-                  s.conso_totale, s.conso_moyenne, s.conso_max, s.conso_min,
-                  s.nb_releves, s.profil_complet, s.est_anomalie, s.score_anomalie
-           FROM stg_profil s
-           JOIN dim_contrat c ON c.num_cta_hash = s.num_cta_hash AND c.reseau_id = %s
-           JOIN dim_segment g ON g.cluster = s.cluster AND g.reseau_id = %s""",
-        (int(SEGMENT_WINDOW[0][:2]), reseau_id, reseau_id, reseau_id),
-    )
-    inserted = cursor.rowcount
-    if inserted != len(staging):
-        raise ValueError(
-            f"{len(staging) - inserted} profils perdus lors du chargement "
-            "(contrat ou segment introuvable dans les dimensions)."
-        )
-    return inserted
+    copy_dataframe(cursor, facts, "fait_profil_consommation")
+    return len(facts)
 
 
 def load_prediction_facts(cursor, reseau_id, predictions):
     """fait_prediction_segment : remplace les prédictions du réseau."""
     cursor.execute("DELETE FROM fait_prediction_segment WHERE reseau_id = %s", (reseau_id,))
-    cursor.execute(
-        """CREATE TEMP TABLE stg_prediction (
-               num_cta_hash TEXT, segment_sep_dec TEXT, segment_predit TEXT,
-               segment_reference TEXT, correct BOOLEAN
-           ) ON COMMIT DROP"""
-    )
-    staging = predictions[[ID_COLUMN, "SEGMENT_SEP_DEC_2025", "SEGMENT_PREDIT_2026",
-                           "SEGMENT_REFERENCE_2026", "CORRECT"]]
-    staging.columns = ["num_cta_hash", "segment_sep_dec", "segment_predit",
-                       "segment_reference", "correct"]
-    copy_dataframe(cursor, staging, "stg_prediction")
 
-    cursor.execute(
-        """INSERT INTO fait_prediction_segment
-               (contrat_id, periode_id, reseau_id, segment_sep_dec_id,
-                segment_predit_id, segment_reference_id, correct)
-           SELECT c.contrat_id, %s, %s, sd.segment_id, sp.segment_id,
-                  sr.segment_id, s.correct
-           FROM stg_prediction s
-           JOIN dim_contrat c  ON c.num_cta_hash = s.num_cta_hash AND c.reseau_id = %s
-           JOIN dim_segment sd ON sd.libelle = s.segment_sep_dec   AND sd.reseau_id = %s
-           JOIN dim_segment sp ON sp.libelle = s.segment_predit    AND sp.reseau_id = %s
-           JOIN dim_segment sr ON sr.libelle = s.segment_reference AND sr.reseau_id = %s""",
-        (period_id(APPLICATION_YEAR), reseau_id, reseau_id, reseau_id, reseau_id, reseau_id),
-    )
-    inserted = cursor.rowcount
-    if inserted != len(staging):
-        raise ValueError(f"{len(staging) - inserted} prédictions perdues lors du chargement.")
-    return inserted
+    labels = segment_keys(cursor, reseau_id, "libelle")
+    facts = resolve(predictions, contract_keys(cursor, reseau_id), ID_COLUMN)
+    for source, target in [
+        ("SEGMENT_SEP_DEC_2025", "segment_sep_dec_id"),
+        ("SEGMENT_PREDIT_2026", "segment_predit_id"),
+        ("SEGMENT_REFERENCE_2026", "segment_reference_id"),
+    ]:
+        facts = resolve(facts, labels, source, target)
+    facts["periode_id"] = period_id(APPLICATION_YEAR)
+    facts["reseau_id"] = reseau_id
+    facts = facts[["contrat_id", "periode_id", "reseau_id", "segment_sep_dec_id",
+                   "segment_predit_id", "segment_reference_id", "CORRECT"]]
+    facts = facts.rename(columns={"CORRECT": "correct"})
+    copy_dataframe(cursor, facts, "fait_prediction_segment")
+    return len(facts)
 
 
 def load_metrics(cursor, reseau_id, metrics):
