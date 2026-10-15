@@ -354,10 +354,50 @@ def quality_results_2026(
 
 
 def quality_history(history, start_date, end_date):
-    """Contrôle de l'historique silver (appelé par main.py)."""
+    """Contrôle global de l'historique silver (toute la période)."""
     report = QualityReport("historique")
     check_readings(history, report, start_date, end_date)
     return report.finish()
+
+
+def quality_history_by_year(history):
+    """
+    Contrôle de l'historique ANNÉE PAR ANNÉE, avec les mêmes règles que
+    2026 : chaque année est comparée à l'année précédente (évolution du
+    nombre de contrats) et doit avoir ses 12 mois de relevés.
+    Appelé par main.py avant l'entraînement.
+    """
+    reports, previous = [], None
+    for year in sorted(history[DATE_COLUMN].dt.year.unique()):
+        readings = history[history[DATE_COLUMN].dt.year == year]
+        report = QualityReport(f"historique_{year}")
+        check_readings(readings, report, f"{year}-01-01", f"{year}-12-31", previous)
+        reports.append(report.finish())
+        previous = readings
+    return reports
+
+
+def quality_training_profiles(profiles):
+    """
+    Contrôle des profils d'apprentissage janvier-avril, année par année
+    (mêmes règles que les profils 2026), avant l'entraînement du K-Means.
+    """
+    reports, previous = [], None
+    for year, part in profiles.groupby("ANNEE"):
+        report = QualityReport(f"profils_entrainement_{year}")
+        check_profiles(part, report)
+        if previous is not None:
+            change = len(part) / previous - 1
+            report.graded(
+                "Évolution du nombre de profils / année N-1", abs(change),
+                QUALITY_CONTRACTS_WARNING, QUALITY_CONTRACTS_BLOCKING,
+                f"{previous:,} -> {len(part):,} ; avertissement > "
+                f"{QUALITY_CONTRACTS_WARNING:.0%}, bloquant > {QUALITY_CONTRACTS_BLOCKING:.0%}",
+                display=f"{change:+.1%}",
+            )
+        reports.append(report.finish())
+        previous = len(part)
+    return reports
 
 
 if __name__ == "__main__":

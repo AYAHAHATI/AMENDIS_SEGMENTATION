@@ -47,8 +47,10 @@ data/lake/silver/releves/reseau=<réseau>/annee=<année>/part-0.parquet
    │  read_silver (réseau + fenêtre) -> profils, modèles
    ▼
 data/lake/gold/<table>/reseau=<réseau>/part-0.parquet
-   profils_entrainement, clients_segmentes_2026, anomalies_2026,
-   predictions_segments_2026, metriques_prediction_2026
+   historique : profils_entrainement, segments_entrainement, statistiques_segments,
+                anomalies_historique, comparaison_modeles, profils_sep_dec_2025, choix_k
+   2026       : clients_segmentes_2026, anomalies_2026,
+                predictions_segments_2026, metriques_prediction_2026
 ```
 
 - Le premier `python main.py` construit le bronze et le silver de l'historique ; les exécutions suivantes lisent directement le silver (plus de relecture des gros CSV).
@@ -57,7 +59,7 @@ data/lake/gold/<table>/reseau=<réseau>/part-0.parquet
 - Les CSV de `data/final/` (lus par Power BI) sont toujours produits, à l'identique.
 ## Contrôles qualité (`pipeline/quality.py`)
 
-Trois points de contrôle dans le traitement 2026 (tâches du DAG et de `run_2026.py`), plus un contrôle de l'historique dans `main.py` :
+Trois points de contrôle dans le traitement 2026 (tâches du DAG et de `run_2026.py`). L'historique est contrôlé avec les mêmes règles dans `main.py`, **année par année** (relevés 2022, 2023, 2024, 2025 puis profils d'apprentissage de chaque année, avec l'évolution par rapport à l'année précédente) ; un échec bloquant arrête l'entraînement.
 
 | Tâche | Ce qui est vérifié |
 |---|---|

@@ -219,6 +219,8 @@ def train_segment_model(history=None):
         history, *window_dates(APPLICATION_YEAR - 1, PAST_WINDOW)
     )
     past.to_csv(PAST_PROFILE_FILE, index=False)
+    write_gold(comparison, "comparaison_modeles")
+    write_gold(past, f"profils_sep_dec_{APPLICATION_YEAR - 1}")
     print(f"Profil passé enregistré : {PAST_PROFILE_FILE} ({len(past):,})")
 
     return comparison

@@ -28,6 +28,7 @@ from config.config import (
     ensure_dirs,
 )
 from ml.labels import build_labels, save_labels
+from pipeline.lake import write_gold
 
 INPUT_FILE = INTERMEDIATE_DIR / "training_windows.csv"
 
@@ -82,6 +83,8 @@ def train_kmeans(k=N_CLUSTERS):
 
     df.to_csv(INTERMEDIATE_DIR / f"clients_cluster_k{k}.csv", index=False)
     stats.to_csv(INTERMEDIATE_DIR / "statistiques_clusters.csv")
+    write_gold(df, "segments_entrainement")
+    write_gold(stats.reset_index(), "statistiques_segments")
     print(f"\nModèles enregistrés : {SCALER_FILE.name}, {KMEANS_FILE.name}")
     return model, scaler, labels
 

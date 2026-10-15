@@ -43,6 +43,8 @@ def choose_k(k_values=range(2, 11)):
 
     result = pd.DataFrame(rows)
     result.to_csv(INTERMEDIATE_DIR / "choix_k.csv", index=False)
+    from pipeline.lake import write_gold
+    write_gold(result, "choix_k")
 
     for column, title, filename in [
         ("INERTIE", "Méthode du coude (Elbow Method)", "elbow_method.png"),

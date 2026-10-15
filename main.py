@@ -52,16 +52,23 @@ def main():
 
     history = load_history()
 
-    from config.config import HIST_FILES
-    from pipeline.quality import quality_history
-    quality_history(
-        history,
-        min(start for _, _, start, _ in HIST_FILES),
-        max(end for _, _, _, end in HIST_FILES),
+    # Contrôles qualité de l'historique, année par année (mêmes règles
+    # que pour 2026). Un contrôle bloquant en échec arrête l'entraînement.
+    from pipeline.quality import (
+        DataQualityError, quality_history_by_year, quality_training_profiles,
     )
+    try:
+        print("\n[contrôles] Relevés historiques, année par année")
+        quality_history_by_year(history)
 
-    print("\n[1/4] Profils janvier-avril 2022-2025")
-    build_training_windows(history)
+        print("\n[1/4] Profils janvier-avril 2022-2025")
+        profiles = build_training_windows(history)
+
+        print("\n[contrôles] Profils d'apprentissage, année par année")
+        quality_training_profiles(profiles)
+    except DataQualityError as error:
+        print(f"\nENTRAÎNEMENT ARRÊTÉ PAR LE CONTRÔLE QUALITÉ : {error}")
+        return 1
 
     if args.choose_k:
         from ml.choose_k import choose_k

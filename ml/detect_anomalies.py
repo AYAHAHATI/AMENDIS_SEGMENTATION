@@ -81,6 +81,8 @@ def train_anomaly_models():
     print("\nAnomalies sur l'historique par segment :")
     print(summarize(scored).to_string())
     scored.to_csv(FINAL_DIR / "anomaly_scores_historical.csv", index=False)
+    from pipeline.lake import write_gold
+    write_gold(scored, "anomalies_historique")
     print(f"Modèles enregistrés : {ANOMALY_MODEL_FILE}")
     return models
 
