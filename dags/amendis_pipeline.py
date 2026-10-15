@@ -21,7 +21,8 @@ fait échouer la tâche, et Airflow n'exécute pas les tâches suivantes.
 Enchaînement :
 extract -> transform -> quality_silver -> aggregate -> feature_engineering
 -> quality_profiles -> scaler -> predict (K-Means) -> create_final
--> quality_results -> [predict_segments, detect_anomalies]
+-> quality_results -> [predict_segments, detect_anomalies] -> load_dwh
+(entrepôt PostgreSQL : service amendis-dwh de docker-compose.yaml)
 """
 
 from datetime import datetime
@@ -112,6 +113,14 @@ def detect_anomalies_2026_task():
     predict_anomalies_2026()
 
 
+def load_dwh_2026_task():
+    """Gold -> entrepôt PostgreSQL (schéma en étoile) + réconciliation."""
+    from pipeline.warehouse import load_network, reconcile
+
+    load_network()
+    reconcile()
+
+
 with DAG(
     dag_id="amendis_pipeline",
     description="Segmentation, prédiction et anomalies - données janvier-avril 2026",
@@ -147,6 +156,7 @@ with DAG(
     anomaly_detection = PythonOperator(
         task_id="detect_anomalies_2026", python_callable=detect_anomalies_2026_task
     )
+    load_dwh = PythonOperator(task_id="load_dwh_2026", python_callable=load_dwh_2026_task)
 
     (
         extract
@@ -160,4 +170,5 @@ with DAG(
         >> final_dataset
         >> quality_results
         >> [segment_prediction, anomaly_detection]
+        >> load_dwh
     )

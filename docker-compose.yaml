@@ -9,6 +9,9 @@ x-airflow-common:
     PYTHONPATH: /opt/airflow
     # Réseau traité par le DAG : BASSE TENSION (défaut) ou EAU
     AMENDIS_RESEAU: ${AMENDIS_RESEAU:-BASSE TENSION}
+    # Entrepôt de données : vu depuis les conteneurs Airflow
+    AMENDIS_DWH_HOST: amendis-dwh
+    AMENDIS_DWH_PORT: "5432"
 
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
 
@@ -93,6 +96,39 @@ services:
 
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+    restart: always
+
+
+  # ==========================================================
+  # ENTREPÔT DE DONNÉES AMENDIS (PostgreSQL 16)
+  # ----------------------------------------------------------
+  # Base séparée de celle d'Airflow (qui ne contient que l'état
+  # d'Airflow). Accessible depuis le PC sur localhost:5433
+  # (Power BI, scripts Python). Démarrage seul :
+  #   docker compose up -d amendis-dwh
+  # ==========================================================
+
+  amendis-dwh:
+
+    image: postgres:16
+
+    environment:
+      POSTGRES_USER: amendis
+      POSTGRES_PASSWORD: amendis
+      POSTGRES_DB: amendis_dwh
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - amendis-dwh-volume:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "amendis", "-d", "amendis_dwh"]
       interval: 10s
       retries: 5
       start_period: 5s
@@ -446,3 +482,5 @@ services:
 volumes:
 
   postgres-db-volume:
+
+  amendis-dwh-volume:

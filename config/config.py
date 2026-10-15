@@ -224,6 +224,21 @@ QUALITY_SEGMENT_DRIFT_WARNING = 5.0
 
 
 # ==========================================================
+# ENTREPÔT DE DONNÉES (PostgreSQL, pipeline/warehouse.py)
+# ----------------------------------------------------------
+# Depuis le PC (scripts Python, Power BI) : localhost:5433
+# Depuis les conteneurs Airflow : amendis-dwh:5432
+# (valeurs données par docker-compose.yaml)
+# ==========================================================
+
+DWH_HOST = os.environ.get("AMENDIS_DWH_HOST", "localhost")
+DWH_PORT = int(os.environ.get("AMENDIS_DWH_PORT", 5433))
+DWH_DATABASE = os.environ.get("AMENDIS_DWH_DB", "amendis_dwh")
+DWH_USER = os.environ.get("AMENDIS_DWH_USER", "amendis")
+DWH_PASSWORD = os.environ.get("AMENDIS_DWH_PASSWORD", "amendis")
+
+
+# ==========================================================
 # FICHIERS DE MODÈLES
 # ==========================================================
 

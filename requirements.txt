@@ -6,4 +6,4 @@ requests==2.32.5
 openpyxl==3.1.5
 PyYAML==6.0.2
 pyarrow>=14  # Parquet (data lake) ; version déjà fournie par l image Airflow si compatible
-
+psycopg2-binary>=2.9  # entrepôt PostgreSQL

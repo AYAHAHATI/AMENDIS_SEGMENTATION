@@ -13,6 +13,10 @@ Les deux premières étapes alimentent le data lake :
                    partitionnés par réseau et par année)
 - aggregate_2026 : SILVER (fenêtre janvier-avril) -> profils par contrat
 
+Dernière étape : chargement de l'entrepôt PostgreSQL (schéma en étoile),
+suivi d'une réconciliation gold <-> entrepôt. L'entrepôt doit tourner :
+    docker compose up -d amendis-dwh
+
 Trois contrôles qualité (pipeline/quality.py) arrêtent le traitement
 si les données sont anormales : après le silver, après les profils et
 après la segmentation.
@@ -32,6 +36,7 @@ from ml.predict_kmeans import predict_kmeans_2026
 from ml.create_final_dataset import create_final_dataset
 from ml.predict_segments import predict_segments_2026
 from ml.predict_anomalies_2026 import predict_anomalies_2026
+from pipeline.warehouse import load_network, reconcile
 from pipeline.quality import (
     DataQualityError, quality_silver_2026, quality_profiles_2026, quality_results_2026,
 )
@@ -57,6 +62,7 @@ STEPS = [
     ("quality_results_2026", quality_results_2026),
     ("predict_segments_2026", predict_segments_2026),
     ("detect_anomalies_2026", predict_anomalies_2026),
+    ("load_dwh_2026", lambda: (load_network(), reconcile())),
 ]
 
 

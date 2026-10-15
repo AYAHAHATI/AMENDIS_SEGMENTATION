@@ -57,6 +57,31 @@ data/lake/gold/<table>/reseau=<réseau>/part-0.parquet
 - Commandes : `python -m pipeline.lake history` (forcer : `history --force`), `python -m pipeline.lake 2026`, `python -m pipeline.lake status`.
 - `python scripts/benchmark_formats.py` compare la taille et le temps de lecture CSV / Parquet.
 - Les CSV de `data/final/` (lus par Power BI) sont toujours produits, à l'identique.
+## Entrepôt de données PostgreSQL (`pipeline/warehouse.py`)
+
+Schéma en étoile (`pipeline/sql/schema.sql`), alimenté à partir de la couche gold :
+
+```
+                    dim_periode (janvier-avril 2022 ... 2026)
+                         |
+ dim_contrat --- fait_profil_consommation --- dim_segment
+                         |                    (Très faible ... Très forte, Profil incomplet)
+                    dim_reseau (électricité kWh / eau m3)
+
+ fait_prediction_segment : segment sep-déc 2025, prédit et de référence (2026)
+ metriques_modeles       : test 2024-2025 et application 2026
+ journal_chargements     : une ligne par chargement
+ vues : v_profils, v_predictions_2026, v_synthese_segments
+```
+
+- Granularité de `fait_profil_consommation` : un contrat × une période janvier–avril (historique 2022–2025 et 2026).
+- Chargement : staging (COPY) puis SQL vers les dimensions et les faits, en **une transaction** (une panne ne modifie rien), idempotent (relancer = même contenu), suivi d'une **réconciliation** gold ↔ entrepôt.
+- Démarrer l'entrepôt seul : `docker compose up -d amendis-dwh` (PostgreSQL 16, `localhost:5433`, base `amendis_dwh`, utilisateur/mot de passe `amendis`).
+- Commandes : `python -m pipeline.warehouse load` (réseau courant), `reconcile`, `status`.
+- `run_2026.py` et le DAG se terminent par `load_dwh_2026`.
+- Exemples de requêtes SQL : `pipeline/sql/exemples.sql`.
+- Power BI : Obtenir des données → PostgreSQL → serveur `localhost:5433`, base `amendis_dwh`.
+
 ## Contrôles qualité (`pipeline/quality.py`)
 
 Trois points de contrôle dans le traitement 2026 (tâches du DAG et de `run_2026.py`). L'historique est contrôlé avec les mêmes règles dans `main.py`, **année par année** (relevés 2022, 2023, 2024, 2025 puis profils d'apprentissage de chaque année, avec l'évolution par rapport à l'année précédente) ; un échec bloquant arrête l'entraînement.
