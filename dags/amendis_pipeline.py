@@ -15,9 +15,13 @@ Data lake (data/lake/) :
 - transform_2026 : BRONZE -> SILVER (nettoyé, partitionné réseau/année)
 - create_final, predict_segments, detect_anomalies -> GOLD
 
+Contrôles qualité (pipeline/quality.py) : un contrôle BLOQUANT en échec
+fait échouer la tâche, et Airflow n'exécute pas les tâches suivantes.
+
 Enchaînement :
-extract -> transform -> aggregate -> feature_engineering -> scaler
--> predict (K-Means) -> create_final -> [predict_segments, detect_anomalies]
+extract -> transform -> quality_silver -> aggregate -> feature_engineering
+-> quality_profiles -> scaler -> predict (K-Means) -> create_final
+-> quality_results -> [predict_segments, detect_anomalies]
 """
 
 from datetime import datetime
@@ -48,6 +52,27 @@ def aggregate_2026_task():
 
     start, end = window_dates(APPLICATION_YEAR, SEGMENT_WINDOW)
     DataAggregator().run_from_silver(start, end, "hist_2026_client.csv")
+
+
+def quality_silver_2026_task():
+    """Contrôle qualité des relevés silver (bloquant si anomalie grave)."""
+    from pipeline.quality import quality_silver_2026
+
+    quality_silver_2026()
+
+
+def quality_profiles_2026_task():
+    """Contrôle qualité des profils par contrat."""
+    from pipeline.quality import quality_profiles_2026
+
+    quality_profiles_2026()
+
+
+def quality_results_2026_task():
+    """Contrôle qualité des segments obtenus."""
+    from pipeline.quality import quality_results_2026
+
+    quality_results_2026()
 
 
 def feature_engineering_2026_task():
@@ -98,14 +123,23 @@ with DAG(
 
     extract = PythonOperator(task_id="extract_2026", python_callable=extract_2026_task)
     transform = PythonOperator(task_id="transform_2026", python_callable=transform_2026_task)
+    quality_silver = PythonOperator(
+        task_id="quality_silver_2026", python_callable=quality_silver_2026_task
+    )
     aggregate = PythonOperator(task_id="aggregate_2026", python_callable=aggregate_2026_task)
     feature_engineering = PythonOperator(
         task_id="feature_engineering_2026", python_callable=feature_engineering_2026_task
+    )
+    quality_profiles = PythonOperator(
+        task_id="quality_profiles_2026", python_callable=quality_profiles_2026_task
     )
     scaler = PythonOperator(task_id="scaler_2026", python_callable=scaler_2026_task)
     prediction = PythonOperator(task_id="predict_2026", python_callable=predict_2026_task)
     final_dataset = PythonOperator(
         task_id="create_final_2026", python_callable=create_final_2026_task
+    )
+    quality_results = PythonOperator(
+        task_id="quality_results_2026", python_callable=quality_results_2026_task
     )
     segment_prediction = PythonOperator(
         task_id="predict_segments_2026", python_callable=predict_segments_2026_task
@@ -117,10 +151,13 @@ with DAG(
     (
         extract
         >> transform
+        >> quality_silver
         >> aggregate
         >> feature_engineering
+        >> quality_profiles
         >> scaler
         >> prediction
         >> final_dataset
+        >> quality_results
         >> [segment_prediction, anomaly_detection]
     )

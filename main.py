@@ -52,6 +52,14 @@ def main():
 
     history = load_history()
 
+    from config.config import HIST_FILES
+    from pipeline.quality import quality_history
+    quality_history(
+        history,
+        min(start for _, _, start, _ in HIST_FILES),
+        max(end for _, _, _, end in HIST_FILES),
+    )
+
     print("\n[1/4] Profils janvier-avril 2022-2025")
     build_training_windows(history)
 

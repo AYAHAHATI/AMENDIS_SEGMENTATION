@@ -190,6 +190,40 @@ MIN_SEGMENT_SIZE_FOR_IF = 30
 
 
 # ==========================================================
+# CONTRÔLES QUALITÉ (pipeline/quality.py)
+# ----------------------------------------------------------
+# BLOQUANT      : le pipeline s'arrête (résultats non produits).
+# AVERTISSEMENT : le pipeline continue, l'anomalie est signalée.
+# Les seuils sont volontairement larges : ils doivent repérer une
+# donnée cassée (fichier tronqué, mauvais réseau, colonne vide...),
+# pas une variation normale d'une année à l'autre.
+# ==========================================================
+
+QUALITY_DIR = DATA_DIR / "lake" / "quality"
+
+# Évolution du nombre de contrats par rapport à la même fenêtre
+# de l'année précédente (en valeur absolue)
+QUALITY_CONTRACTS_WARNING = 0.15     # +/- 15 % -> avertissement
+QUALITY_CONTRACTS_BLOCKING = 0.50    # +/- 50 % -> bloquant
+
+# Un mois de la fenêtre doit compter au moins 50 % des relevés
+# du mois médian (sinon : mois manquant ou fichier tronqué)
+QUALITY_MIN_MONTH_RATIO = 0.50
+
+# Part de profils incomplets (< MIN_RELEVES relevés)
+QUALITY_INCOMPLETE_WARNING = 0.05
+QUALITY_INCOMPLETE_BLOCKING = 0.20
+
+# Part de volumes négatifs tolérée (corrections d'index)
+QUALITY_NEGATIVE_WARNING = 0.0
+QUALITY_NEGATIVE_BLOCKING = 0.01
+
+# Écart maximal (en points de %) entre la part d'un segment en 2026
+# et sa part sur l'historique
+QUALITY_SEGMENT_DRIFT_WARNING = 5.0
+
+
+# ==========================================================
 # FICHIERS DE MODÈLES
 # ==========================================================
 

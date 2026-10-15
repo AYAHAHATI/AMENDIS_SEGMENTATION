@@ -55,6 +55,22 @@ data/lake/gold/<table>/reseau=<réseau>/part-0.parquet
 - Commandes : `python -m pipeline.lake history` (forcer : `history --force`), `python -m pipeline.lake 2026`, `python -m pipeline.lake status`.
 - `python scripts/benchmark_formats.py` compare la taille et le temps de lecture CSV / Parquet.
 - Les CSV de `data/final/` (lus par Power BI) sont toujours produits, à l'identique.
+## Contrôles qualité (`pipeline/quality.py`)
+
+Trois points de contrôle dans le traitement 2026 (tâches du DAG et de `run_2026.py`), plus un contrôle de l'historique dans `main.py` :
+
+| Tâche | Ce qui est vérifié |
+|---|---|
+| `quality_silver_2026` | relevés présents, aucune valeur manquante, dates dans la fenêtre, volumes négatifs, doublons, les 4 mois présents, évolution du nombre de contrats par rapport à janvier–avril de l'année précédente |
+| `quality_profiles_2026` | un profil par contrat, pas de valeur manquante, MIN ≤ MOYENNE ≤ MAX, TOTALE = MOYENNE × NB_RELEVES, part de profils incomplets |
+| `quality_results_2026` | tous les profils ont un segment, les 5 segments sont représentés, répartition proche de l'historique |
+
+- **BLOQUANT** : la tâche échoue et Airflow n'exécute pas les tâches suivantes (aucun résultat faux n'est produit).
+- **AVERTISSEMENT** : le traitement continue, l'écart est signalé.
+- Seuils dans `config/config.py` (section CONTRÔLES QUALITÉ).
+- Rapports : `data/lake/quality/dernier_<etape>_<reseau>.csv` et `historique_controles.csv` (une ligne par contrôle et par exécution).
+- Démonstration : `python scripts/demo_quality.py` abîme volontairement les données en mémoire (avril absent, volumes négatifs, contrats disparus, doublons) et montre que les contrôles arrêtent le pipeline.
+
 - Test sur échantillons : `python scripts/create_sample_2026.py` crée un faux fichier 2026 (relevés 2025 décalés d'un an), puis `AMENDIS_DATA_MODE=sample python run_2026.py`.
 
 ## Utilisation

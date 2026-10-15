@@ -13,6 +13,10 @@ Les deux premières étapes alimentent le data lake :
                    partitionnés par réseau et par année)
 - aggregate_2026 : SILVER (fenêtre janvier-avril) -> profils par contrat
 
+Trois contrôles qualité (pipeline/quality.py) arrêtent le traitement
+si les données sont anormales : après le silver, après les profils et
+après la segmentation.
+
 Usage :
     python run_2026.py
 """
@@ -28,6 +32,9 @@ from ml.predict_kmeans import predict_kmeans_2026
 from ml.create_final_dataset import create_final_dataset
 from ml.predict_segments import predict_segments_2026
 from ml.predict_anomalies_2026 import predict_anomalies_2026
+from pipeline.quality import (
+    DataQualityError, quality_silver_2026, quality_profiles_2026, quality_results_2026,
+)
 
 
 def aggregate_2026():
@@ -38,13 +45,16 @@ def aggregate_2026():
 STEPS = [
     ("extract_2026", lambda: ingest_bronze(FILE_2026)),
     ("transform_2026", build_silver_2026),
+    ("quality_silver_2026", quality_silver_2026),
     ("aggregate_2026", aggregate_2026),
     ("feature_engineering_2026", lambda: FeatureEngineer().run(
         "hist_2026_client.csv", "features_2026.csv")),
+    ("quality_profiles_2026", quality_profiles_2026),
     ("scaler_2026", lambda: DataScaler().run_test(
         "features_2026.csv", "scaled_features_2026.csv")),
     ("predict_2026", predict_kmeans_2026),
     ("create_final_2026", create_final_dataset),
+    ("quality_results_2026", quality_results_2026),
     ("predict_segments_2026", predict_segments_2026),
     ("detect_anomalies_2026", predict_anomalies_2026),
 ]
@@ -56,7 +66,12 @@ def main():
         print(f"[{number}/{len(STEPS)}] {name}")
         print("=" * 60)
         started = time.time()
-        step()
+        try:
+            step()
+        except DataQualityError as error:
+            print(f"\nPIPELINE ARRÊTÉ PAR LE CONTRÔLE QUALITÉ : {error}")
+            print("Les étapes suivantes ne sont pas exécutées.")
+            raise SystemExit(1)
         print(f"-> {name} terminé en {time.time() - started:.1f} s")
 
     print("\nTRAITEMENT 2026 TERMINÉ : résultats dans data/final/ et data/lake/gold/")
