@@ -184,13 +184,14 @@ def check_readings(readings, report, start_date, end_date, reference=None):
     report.check("Dates dans la fenêtre étudiée", outside == 0, outside,
                  f"{start.date()} -> {end.date()}")
 
-    negative = float((readings[VOLUME_COLUMN] < 0).mean())
+    n_negative = int((readings[VOLUME_COLUMN] < 0).sum())
+    negative = n_negative / n
     report.graded(
         "Volumes négatifs", negative,
         QUALITY_NEGATIVE_WARNING, QUALITY_NEGATIVE_BLOCKING,
         f"avertissement > {QUALITY_NEGATIVE_WARNING:.0%}, "
         f"bloquant > {QUALITY_NEGATIVE_BLOCKING:.0%}",
-        display=f"{negative:.2%}",
+        display=f"{n_negative:,} ({negative:.4%})",
     )
 
     duplicates = int(readings.duplicated([ID_COLUMN, DATE_COLUMN, VOLUME_COLUMN]).sum())
