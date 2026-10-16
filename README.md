@@ -83,6 +83,10 @@ Schéma en étoile (`pipeline/sql/schema.sql`), alimenté à partir de la couche
 - Exemples de requêtes SQL : `pipeline/sql/exemples.sql`.
 - Power BI : Obtenir des données → PostgreSQL → serveur `localhost:5433`, base `amendis_dwh`.
 
+### Versions des bibliothèques : identiques partout
+
+Les versions sont fixées exactement dans `requirements.txt` (`==`), et l'image Airflow les installe (`docker compose up -d --build`). C'est indispensable pour le Parquet : un fichier écrit par pyarrow 26 (sur le PC) ne peut pas être lu par pyarrow 19 (version par défaut de l'image Airflow 2.10.5) : erreur `OSError: Repetition level histogram size mismatch`. Après toute modification de `requirements.txt`, reconstruire l'image.
+
 ## Contrôles qualité (`pipeline/quality.py`)
 
 Trois points de contrôle dans le traitement 2026 (tâches du DAG et de `run_2026.py`). L'historique est contrôlé avec les mêmes règles dans `main.py`, **année par année** (relevés 2022, 2023, 2024, 2025 puis profils d'apprentissage de chaque année, avec l'évolution par rapport à l'année précédente) ; un échec bloquant arrête l'entraînement.
