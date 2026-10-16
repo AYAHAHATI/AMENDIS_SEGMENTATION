@@ -26,7 +26,8 @@ Règles de préparation, identiques partout :
 config/config.py        paramètres (chemins, fenêtres, réseau, K, modèles)
 pipeline/               extraction, nettoyage, agrégation, variables, standardisation
 ml/                     entraînement et application des modèles
-dags/amendis_pipeline.py  DAG Airflow (traitement 2026)
+dags/amendis_pipeline.py  DAG Airflow (traitement 2026, deux réseaux en parallèle)
+pipeline/steps.py       étapes 2026 exécutables une par une (utilisées par le DAG)
 experiments/            scripts exploratoires de la version précédente (non maintenus)
 data/raw/               données Amendis complètes (non versionnées)
 data/sample/            échantillons pour tester rapidement
@@ -144,17 +145,29 @@ echo "AIRFLOW_UID=$(id -u)" > .env
 docker compose up -d --build
 ```
 
-Ouvrir http://localhost:8080 (airflow / airflow), puis lancer le DAG `amendis_pipeline` :
+Ouvrir http://localhost:8080 (airflow / airflow), puis lancer le DAG `amendis_pipeline`. Une seule exécution traite **les deux réseaux** (26 tâches) :
 
 ```
-extract → transform (janvier–avril 2026) → aggregate → feature_engineering → scaler
-→ predict (K-Means) → create_final → predict_segments_2026 + detect_anomalies_2026
+                                        ┌── électricité (TaskGroup, 11 tâches) ──┐
+extract_2026 → transform_2026 → init_dwh                                         ├→ combine_reseaux
+                                        └── eau (TaskGroup, 11 tâches) ──────────┘
+
+Dans chaque groupe :
+quality_silver → aggregate → feature_engineering → quality_profiles → scaler → predict
+→ create_final → quality_results → [predict_segments, detect_anomalies] → load_dwh
 ```
 
-Sans Docker, les mêmes 9 étapes s'exécutent avec Python seul :
+- `extract_2026` (bronze), `transform_2026` (silver des deux réseaux) et `init_dwh` (schéma de l'entrepôt) s'exécutent une seule fois.
+- Les deux réseaux s'exécutent en parallèle ; chaque tâche est un processus séparé (`python -m pipeline.steps <étape>`) avec sa propre variable `AMENDIS_RESEAU`.
+- `combine_reseaux` attend les deux réseaux puis produit les CSV de l'ancien tableau de bord.
+- Un contrôle qualité bloquant en échec arrête les tâches suivantes du réseau (`upstream_failed`) et `combine_reseaux`.
+
+Sans Docker, les mêmes étapes s'exécutent pour un réseau avec Python seul :
 
 ```bash
-python run_2026.py
+python run_2026.py                       # réseau AMENDIS_RESEAU (électricité par défaut)
+python -m pipeline.steps <étape>         # une seule étape (liste : --list)
+python combine_reseaux.py                # après les deux réseaux
 ```
 
 ### 3. Fichiers pour Power BI (`data/final/<reseau>/` et `data/final/tous_reseaux/`)

@@ -85,6 +85,35 @@ def create_schema(cursor):
     cursor.execute(SCHEMA_FILE.read_text(encoding="utf-8"))
 
 
+def ensure_schema(cursor):
+    """
+    Crée le schéma seulement s'il n'existe pas encore. Dans le DAG, il est
+    créé une fois par la tâche init_dwh : les chargements des deux réseaux,
+    qui tournent en parallèle, ne recréent donc pas les vues en même temps.
+    """
+    cursor.execute("SELECT to_regclass('public.fait_profil_consommation')")
+    if cursor.fetchone()[0] is None:
+        create_schema(cursor)
+        load_periods(cursor)
+
+
+def init_schema():
+    """
+    Crée le schéma de l'entrepôt (tables, vues) et la dimension période.
+    Exécutée une fois avant les chargements des deux réseaux, qui
+    peuvent ensuite tourner en parallèle sans se gêner.
+    """
+    connection = connect()
+    try:
+        with connection:
+            with connection.cursor() as cursor:
+                create_schema(cursor)
+                load_periods(cursor)
+    finally:
+        connection.close()
+    print(f"[entrepôt] schéma prêt ({DWH_HOST}:{DWH_PORT}/{DWH_DATABASE})")
+
+
 def copy_dataframe(cursor, df, table):
     """
     Copie un DataFrame dans une table avec COPY (chargement en masse,
@@ -196,8 +225,7 @@ def load_network(network=NETWORK):
     try:
         with connection:                       # transaction : tout ou rien
             with connection.cursor() as cursor:
-                step("schéma (tables et vues)", create_schema, cursor)
-                step("dim_periode", load_periods, cursor)
+                step("schéma (tables et vues)", ensure_schema, cursor)
                 step("dim_segment", load_segments, cursor, reseau_id, segments)
                 n_contracts = step("dim_contrat", load_contracts,
                                    cursor, reseau_id, profiles, predictions)

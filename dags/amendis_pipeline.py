@@ -1,174 +1,123 @@
 """
 amendis_pipeline.py
 
-Orchestration Airflow du traitement des données 2026.
+Orchestration Airflow du traitement des données 2026, pour LES DEUX
+RÉSEAUX (électricité et eau) en une seule exécution.
 
-Pré-requis : les modèles ont été entraînés sur l'historique
-2022-2025 avec `python main.py` (dossier models/).
+Pré-requis : les modèles ont été entraînés sur l'historique 2022-2025
+avec `python main.py` (pour chaque réseau), et l'entrepôt PostgreSQL
+tourne (service amendis-dwh de docker-compose.yaml).
 
-Les données 2026 vont du 1er janvier au 18 mai 2026. Mai étant
-incomplet, seule la fenêtre janvier-avril est conservée, comme
-pour les profils d'entraînement.
+                                       ┌── électricité (TaskGroup) ──┐
+extract_2026 → transform_2026 → init_dwh                              ├→ combine_reseaux
+                                       └── eau (TaskGroup) ──────────┘
 
-Data lake (data/lake/) :
-- extract_2026   : fichier source -> BRONZE (Parquet, copie fidèle)
-- transform_2026 : BRONZE -> SILVER (nettoyé, partitionné réseau/année)
-- create_final, predict_segments, detect_anomalies -> GOLD
+- Étapes communes (une seule fois) :
+    extract_2026    fichier 2026 -> couche BRONZE (Parquet)
+    transform_2026  BRONZE -> SILVER (les deux réseaux, partitionnés)
+    init_dwh        schéma de l'entrepôt
+- Un TaskGroup par réseau, exécutés EN PARALLÈLE :
+    quality_silver -> aggregate -> feature_engineering -> quality_profiles
+    -> scaler -> predict (K-Means) -> create_final -> quality_results
+    -> [predict_segments, detect_anomalies] -> load_dwh
+- Étape finale : combine_reseaux (fichiers CSV de l'ancien Power BI)
 
-Contrôles qualité (pipeline/quality.py) : un contrôle BLOQUANT en échec
-fait échouer la tâche, et Airflow n'exécute pas les tâches suivantes.
+Chaque tâche est un processus Python séparé (BashOperator) qui exécute
+une étape de pipeline/steps.py avec SA variable AMENDIS_RESEAU : les deux
+réseaux ne partagent aucun état en mémoire.
 
-Enchaînement :
-extract -> transform -> quality_silver -> aggregate -> feature_engineering
--> quality_profiles -> scaler -> predict (K-Means) -> create_final
--> quality_results -> [predict_segments, detect_anomalies] -> load_dwh
-(entrepôt PostgreSQL : service amendis-dwh de docker-compose.yaml)
+Un contrôle qualité BLOQUANT en échec fait échouer la tâche : les tâches
+suivantes du réseau ne sont pas exécutées.
 """
 
+import sys
 from datetime import datetime
+from pathlib import Path
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
+from airflow.utils.task_group import TaskGroup
+
+# Racine du projet : /opt/airflow dans les conteneurs (dags/ y est monté)
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+PYTHON = sys.executable
+
+NETWORKS = {
+    "electricite": "BASSE TENSION",
+    "eau": "EAU",
+}
 
 
-def extract_2026_task():
-    """Fichier 2026 -> couche BRONZE (Parquet, copie fidèle)."""
-    from config.config import FILE_2026
-    from pipeline.lake import ingest_bronze
-
-    ingest_bronze(FILE_2026)
-
-
-def transform_2026_task():
-    """BRONZE -> SILVER : relevés nettoyés, partitionnés par réseau et année."""
-    from pipeline.lake import build_silver_2026
-
-    build_silver_2026()
-
-
-def aggregate_2026_task():
-    """SILVER (janvier-avril 2026, réseau traité) -> profils par contrat."""
-    from config.config import APPLICATION_YEAR, SEGMENT_WINDOW, window_dates
-    from pipeline.aggregate import DataAggregator
-
-    start, end = window_dates(APPLICATION_YEAR, SEGMENT_WINDOW)
-    DataAggregator().run_from_silver(start, end, "hist_2026_client.csv")
-
-
-def quality_silver_2026_task():
-    """Contrôle qualité des relevés silver (bloquant si anomalie grave)."""
-    from pipeline.quality import quality_silver_2026
-
-    quality_silver_2026()
-
-
-def quality_profiles_2026_task():
-    """Contrôle qualité des profils par contrat."""
-    from pipeline.quality import quality_profiles_2026
-
-    quality_profiles_2026()
-
-
-def quality_results_2026_task():
-    """Contrôle qualité des segments obtenus."""
-    from pipeline.quality import quality_results_2026
-
-    quality_results_2026()
-
-
-def feature_engineering_2026_task():
-    from pipeline.feature_engineering import FeatureEngineer
-
-    FeatureEngineer().run("hist_2026_client.csv", "features_2026.csv")
-
-
-def scaler_2026_task():
-    from pipeline.scaler import DataScaler
-
-    # Scaler historique, jamais réajusté sur 2026
-    DataScaler().run_test("features_2026.csv", "scaled_features_2026.csv")
-
-
-def predict_2026_task():
-    from ml.predict_kmeans import predict_kmeans_2026
-
-    predict_kmeans_2026()
-
-
-def create_final_2026_task():
-    from ml.create_final_dataset import create_final_dataset
-
-    create_final_dataset()
-
-
-def predict_segments_2026_task():
-    from ml.predict_segments import predict_segments_2026
-
-    predict_segments_2026()
-
-
-def detect_anomalies_2026_task():
-    from ml.predict_anomalies_2026 import predict_anomalies_2026
-
-    predict_anomalies_2026()
-
-
-def load_dwh_2026_task():
-    """Gold -> entrepôt PostgreSQL (schéma en étoile) + réconciliation."""
-    from pipeline.warehouse import load_network, reconcile
-
-    load_network()
-    reconcile()
+def step_task(step, network=None, task_id=None):
+    """
+    Tâche qui exécute `python -m pipeline.steps <step>` dans le dossier du
+    projet. Pour une étape d'un réseau, AMENDIS_RESEAU est fixé pour ce
+    seul processus (append_env : les autres variables sont conservées).
+    """
+    return BashOperator(
+        task_id=task_id or step,
+        bash_command=f'cd "{PROJECT_DIR}" && "{PYTHON}" -u -m pipeline.steps {step}',
+        env={"AMENDIS_RESEAU": network} if network else None,
+        append_env=True,
+    )
 
 
 with DAG(
     dag_id="amendis_pipeline",
-    description="Segmentation, prédiction et anomalies - données janvier-avril 2026",
+    description="Segmentation, prédiction et anomalies 2026 - électricité et eau",
     start_date=datetime(2026, 8, 23),
     schedule="0 2 * * *",  # tous les jours à 02:00
     catchup=False,
-    tags=["amendis", "etl", "machine_learning", "segmentation", "anomalies", "2026"],
+    max_active_runs=1,     # pas deux exécutions en même temps
+    tags=["amendis", "etl", "data_lake", "data_warehouse", "machine_learning", "2026"],
 ) as dag:
 
-    extract = PythonOperator(task_id="extract_2026", python_callable=extract_2026_task)
-    transform = PythonOperator(task_id="transform_2026", python_callable=transform_2026_task)
-    quality_silver = PythonOperator(
-        task_id="quality_silver_2026", python_callable=quality_silver_2026_task
-    )
-    aggregate = PythonOperator(task_id="aggregate_2026", python_callable=aggregate_2026_task)
-    feature_engineering = PythonOperator(
-        task_id="feature_engineering_2026", python_callable=feature_engineering_2026_task
-    )
-    quality_profiles = PythonOperator(
-        task_id="quality_profiles_2026", python_callable=quality_profiles_2026_task
-    )
-    scaler = PythonOperator(task_id="scaler_2026", python_callable=scaler_2026_task)
-    prediction = PythonOperator(task_id="predict_2026", python_callable=predict_2026_task)
-    final_dataset = PythonOperator(
-        task_id="create_final_2026", python_callable=create_final_2026_task
-    )
-    quality_results = PythonOperator(
-        task_id="quality_results_2026", python_callable=quality_results_2026_task
-    )
-    segment_prediction = PythonOperator(
-        task_id="predict_segments_2026", python_callable=predict_segments_2026_task
-    )
-    anomaly_detection = PythonOperator(
-        task_id="detect_anomalies_2026", python_callable=detect_anomalies_2026_task
-    )
-    load_dwh = PythonOperator(task_id="load_dwh_2026", python_callable=load_dwh_2026_task)
+    # ------------------------------------------------------
+    # Étapes communes
+    # ------------------------------------------------------
+    extract = step_task("extract_2026")
+    transform = step_task("transform_2026")
+    init_dwh = step_task("init_dwh")
 
-    (
-        extract
-        >> transform
-        >> quality_silver
-        >> aggregate
-        >> feature_engineering
-        >> quality_profiles
-        >> scaler
-        >> prediction
-        >> final_dataset
-        >> quality_results
-        >> [segment_prediction, anomaly_detection]
-        >> load_dwh
-    )
+    # ------------------------------------------------------
+    # Un groupe de tâches par réseau
+    # ------------------------------------------------------
+    groups = []
+    for slug, network in NETWORKS.items():
+        with TaskGroup(group_id=slug, tooltip=f"Traitement 2026 - {network}") as group:
+            tasks = {
+                step: step_task(step, network)
+                for step in [
+                    "quality_silver_2026",
+                    "aggregate_2026",
+                    "feature_engineering_2026",
+                    "quality_profiles_2026",
+                    "scaler_2026",
+                    "predict_2026",
+                    "create_final_2026",
+                    "quality_results_2026",
+                    "predict_segments_2026",
+                    "detect_anomalies_2026",
+                    "load_dwh_2026",
+                ]
+            }
+            (
+                tasks["quality_silver_2026"]
+                >> tasks["aggregate_2026"]
+                >> tasks["feature_engineering_2026"]
+                >> tasks["quality_profiles_2026"]
+                >> tasks["scaler_2026"]
+                >> tasks["predict_2026"]
+                >> tasks["create_final_2026"]
+                >> tasks["quality_results_2026"]
+                >> [tasks["predict_segments_2026"], tasks["detect_anomalies_2026"]]
+                >> tasks["load_dwh_2026"]
+            )
+        groups.append(group)
+
+    # ------------------------------------------------------
+    # Étape finale : fichiers pour l'ancien tableau de bord Power BI
+    # ------------------------------------------------------
+    combine = step_task("combine_reseaux")
+
+    extract >> transform >> init_dwh >> groups >> combine

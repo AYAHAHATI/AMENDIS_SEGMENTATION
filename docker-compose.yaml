@@ -7,7 +7,8 @@ x-airflow-common:
   environment:
     &airflow-common-env
     PYTHONPATH: /opt/airflow
-    # Réseau traité par le DAG : BASSE TENSION (défaut) ou EAU
+    # Réseau par défaut des commandes lancées à la main dans les conteneurs.
+    # Le DAG fixe lui-même AMENDIS_RESEAU pour chaque tâche (deux réseaux).
     AMENDIS_RESEAU: ${AMENDIS_RESEAU:-BASSE TENSION}
     # Entrepôt de données : vu depuis les conteneurs Airflow
     AMENDIS_DWH_HOST: amendis-dwh
