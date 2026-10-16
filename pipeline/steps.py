@@ -23,7 +23,7 @@ Code retour : 0 = succès ; 1 = échec (Airflow marque alors la tâche en échec
 """
 
 import sys
-import time
+import traceback
 
 from config.config import APPLICATION_YEAR, FILE_2026, SEGMENT_WINDOW, NETWORK, window_dates
 
@@ -35,12 +35,12 @@ from config.config import APPLICATION_YEAR, FILE_2026, SEGMENT_WINDOW, NETWORK, 
 
 def extract_2026():
     from pipeline.lake import ingest_bronze
-    ingest_bronze(FILE_2026)
+    return ingest_bronze(FILE_2026)["lignes"]
 
 
 def transform_2026():
     from pipeline.lake import build_silver_2026
-    build_silver_2026()
+    return int(build_silver_2026()["RELEVES"].sum())
 
 
 def init_dwh():
@@ -50,65 +50,66 @@ def init_dwh():
 
 def quality_silver_2026():
     from pipeline.quality import quality_silver_2026 as run
-    run()
+    return run()
 
 
 def aggregate_2026():
     from pipeline.aggregate import DataAggregator
     start, end = window_dates(APPLICATION_YEAR, SEGMENT_WINDOW)
-    DataAggregator().run_from_silver(start, end, "hist_2026_client.csv")
+    return len(DataAggregator().run_from_silver(start, end, "hist_2026_client.csv"))
 
 
 def feature_engineering_2026():
     from pipeline.feature_engineering import FeatureEngineer
-    FeatureEngineer().run("hist_2026_client.csv", "features_2026.csv")
+    return len(FeatureEngineer().run("hist_2026_client.csv", "features_2026.csv"))
 
 
 def quality_profiles_2026():
     from pipeline.quality import quality_profiles_2026 as run
-    run()
+    return run()
 
 
 def scaler_2026():
     from pipeline.scaler import DataScaler
     # Scaler historique, jamais réajusté sur 2026
-    DataScaler().run_test("features_2026.csv", "scaled_features_2026.csv")
+    return len(DataScaler().run_test("features_2026.csv", "scaled_features_2026.csv"))
 
 
 def predict_2026():
     from ml.predict_kmeans import predict_kmeans_2026
-    predict_kmeans_2026()
+    return len(predict_kmeans_2026())
 
 
 def create_final_2026():
     from ml.create_final_dataset import create_final_dataset
-    create_final_dataset()
+    return len(create_final_dataset())
 
 
 def quality_results_2026():
     from pipeline.quality import quality_results_2026 as run
-    run()
+    return run()
 
 
 def predict_segments_2026():
     from ml.predict_segments import predict_segments_2026 as run
-    run()
+    return len(run())
 
 
 def detect_anomalies_2026():
     from ml.predict_anomalies_2026 import predict_anomalies_2026
-    predict_anomalies_2026()
+    return len(predict_anomalies_2026())
 
 
 def load_dwh_2026():
     from pipeline.warehouse import load_network, reconcile
-    load_network()
+    loaded = load_network()
     reconcile()
+    return loaded["profils"]
 
 
 def combine_reseaux():
     from pipeline.combine import main
-    main()
+    return len(main()["clients_segmentes_2026.csv"])
 
 
 # Étapes communes aux deux réseaux (exécutées une seule fois)
@@ -142,25 +143,46 @@ STEPS = {f.__name__: f for f in SHARED_STEPS + NETWORK_STEPS + FINAL_STEPS}
 # ==========================================================
 
 def run_step(name):
-    """Exécute une étape ; renvoie 0 (succès) ou 1 (échec)."""
-    from pipeline.quality import DataQualityError
+    """
+    Exécute une étape, enregistre son suivi (pipeline/monitoring.py) et
+    renvoie 0 (succès) ou 1 (échec : la tâche Airflow échoue).
+    """
+    from pipeline.monitoring import now, record_step
+    from pipeline.quality import DataQualityError, QualityReport
 
     if name not in STEPS:
         print(f"Étape inconnue : {name}. Étapes disponibles : {', '.join(STEPS)}")
         return 1
 
-    scope = "commune" if STEPS[name] in SHARED_STEPS + FINAL_STEPS else NETWORK
+    shared = STEPS[name] in SHARED_STEPS + FINAL_STEPS
+    network = None if shared else NETWORK
     print("=" * 60)
-    print(f"{name} ({scope})")
+    print(f"{name} ({'commune' if shared else NETWORK})")
     print("=" * 60, flush=True)
-    started = time.time()
+
+    started = now()
     try:
-        STEPS[name]()
+        result = STEPS[name]()
     except DataQualityError as error:
         print(f"\nPIPELINE ARRÊTÉ PAR LE CONTRÔLE QUALITÉ : {error}")
         print("Les étapes suivantes ne sont pas exécutées.")
+        record_step(name, network, started, now(), "arret_qualite", message=error)
         return 1
-    print(f"-> {name} terminé en {time.time() - started:.1f} s", flush=True)
+    except Exception as error:
+        traceback.print_exc()
+        record_step(name, network, started, now(), "echec",
+                    message=f"{type(error).__name__}: {error}")
+        return 1
+
+    rows = warnings = None
+    if isinstance(result, QualityReport):
+        warnings = len(result.warnings)
+        rows = result.volume
+    elif result is not None:
+        rows = result
+    ended = now()
+    record_step(name, network, started, ended, "succes", rows=rows, warnings=warnings)
+    print(f"-> {name} terminé en {(ended - started).total_seconds():.1f} s", flush=True)
     return 0
 
 

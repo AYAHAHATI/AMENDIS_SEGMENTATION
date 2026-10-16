@@ -28,10 +28,14 @@ réseaux ne partagent aucun état en mémoire.
 
 Un contrôle qualité BLOQUANT en échec fait échouer la tâche : les tâches
 suivantes du réseau ne sont pas exécutées.
+
+Suivi : chaque tâche enregistre une ligne dans la table suivi_executions
+de l'entrepôt (durée, statut, volume, tentative) ; les contrôles qualité
+vont dans controles_qualite (pipeline/monitoring.py).
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from airflow import DAG
@@ -41,6 +45,22 @@ from airflow.utils.task_group import TaskGroup
 # Racine du projet : /opt/airflow dans les conteneurs (dags/ y est monté)
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 PYTHON = sys.executable
+
+# ----------------------------------------------------------
+# Résilience
+# - retries : une tâche en échec à cause d'une panne PASSAGÈRE (worker pas
+#   prêt, base momentanément indisponible...) est relancée automatiquement ;
+# - execution_timeout : une tâche bloquée est arrêtée au bout de 30 min
+#   (puis relancée) au lieu de paralyser le pipeline ;
+# - les contrôles qualité ne sont PAS relancés : une erreur de données est
+#   déterministe, la relancer ne ferait que retarder l'alerte.
+# ----------------------------------------------------------
+DEFAULT_ARGS = {
+    "retries": 2,
+    "retry_delay": timedelta(minutes=1),
+    "execution_timeout": timedelta(minutes=30),
+}
+QUALITY_STEPS = {"quality_silver_2026", "quality_profiles_2026", "quality_results_2026"}
 
 NETWORKS = {
     "electricite": "BASSE TENSION",
@@ -54,11 +74,13 @@ def step_task(step, network=None, task_id=None):
     projet. Pour une étape d'un réseau, AMENDIS_RESEAU est fixé pour ce
     seul processus (append_env : les autres variables sont conservées).
     """
+    extra = {"retries": 0} if step in QUALITY_STEPS else {}
     return BashOperator(
         task_id=task_id or step,
         bash_command=f'cd "{PROJECT_DIR}" && "{PYTHON}" -u -m pipeline.steps {step}',
         env={"AMENDIS_RESEAU": network} if network else None,
         append_env=True,
+        **extra,
     )
 
 
@@ -69,6 +91,8 @@ with DAG(
     schedule="0 2 * * *",  # tous les jours à 02:00
     catchup=False,
     max_active_runs=1,     # pas deux exécutions en même temps
+    default_args=DEFAULT_ARGS,
+    dagrun_timeout=timedelta(hours=3),
     tags=["amendis", "etl", "data_lake", "data_warehouse", "machine_learning", "2026"],
 ) as dag:
 

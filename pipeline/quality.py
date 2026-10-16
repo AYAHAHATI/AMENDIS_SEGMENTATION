@@ -83,6 +83,7 @@ class QualityReport:
         self.network = network
         self.run_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         self.rows = []
+        self.volume = None   # nombre de lignes contrôlées (pour le suivi)
 
     def check(self, name, passed, value, rule, severity=BLOQUANT):
         """Enregistre le résultat d'un contrôle."""
@@ -146,6 +147,8 @@ class QualityReport:
             header=not HISTORY_FILE.exists(),
         )
         print(f"  Rapport : {latest}")
+        from pipeline.monitoring import record_quality
+        record_quality(table)
 
     def finish(self, save=True):
         """Affiche, enregistre et arrête le pipeline en cas d'échec bloquant."""
@@ -171,6 +174,7 @@ def check_readings(readings, report, start_date, end_date, reference=None):
     reference : relevés de la même fenêtre l'année précédente (optionnel).
     """
     n = len(readings)
+    report.volume = n
     report.check("Relevés présents", n > 0, f"{n:,}", "au moins 1 relevé")
     if n == 0:
         return report
@@ -232,6 +236,7 @@ def check_readings(readings, report, start_date, end_date, reference=None):
 
 def check_profiles(profiles, report):
     n = len(profiles)
+    report.volume = n
     report.check("Profils présents", n > 0, f"{n:,}", "au moins 1 profil")
     if n == 0:
         return report
@@ -280,6 +285,7 @@ def check_results(final, report, training=None, expected_rows=None):
     training : profils d'apprentissage segmentés (répartition de référence)
     """
     n = len(final)
+    report.volume = n
     if expected_rows is not None:
         report.check("Tous les profils sont dans le jeu final", n == expected_rows,
                      f"{n:,}", f"= {expected_rows:,} profils")

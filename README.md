@@ -87,6 +87,17 @@ Schéma en étoile (`pipeline/sql/schema.sql`), alimenté à partir de la couche
 
 Les versions sont fixées exactement dans `requirements.txt` (`==`), et l'image Airflow les installe (`docker compose up -d --build`). C'est indispensable pour le Parquet : un fichier écrit par pyarrow 26 (sur le PC) ne peut pas être lu par pyarrow 19 (version par défaut de l'image Airflow 2.10.5) : erreur `OSError: Repetition level histogram size mismatch`. Après toute modification de `requirements.txt`, reconstruire l'image.
 
+## Suivi des exécutions (`pipeline/monitoring.py`)
+
+- Chaque étape (`pipeline/steps.py`) enregistre une ligne dans la table `suivi_executions` de l'entrepôt : `run_id` (exécution Airflow, ou `manuel_<date>`), étape, réseau, **tentative**, début, fin, durée, statut (`succes`, `echec`, `arret_qualite`), volume produit, avertissements qualité, message d'erreur.
+- Les résultats des contrôles qualité vont dans `controles_qualite`.
+- Vue `v_sante_pipeline` : une ligne par exécution (durée, étapes en échec ou relancées, avertissements, statut global).
+- Journalisation « au mieux » : si l'entrepôt est inaccessible, la ligne va dans `data/lake/suivi/*.csv` et le pipeline continue ; elle est recopiée dans l'entrepôt à la prochaine écriture réussie (rattrapage).
+- `python -m pipeline.monitoring` : dernières exécutions et détail de la plus récente (`python -m pipeline.monitoring <run_id>` pour une autre).
+- Requêtes d'exemple : fin de `pipeline/sql/exemples.sql`.
+
+Résilience du DAG (`default_args`) : `retries=2` avec `retry_delay` d'1 minute (pannes passagères : worker pas prêt, base momentanément indisponible), `execution_timeout` de 30 minutes par tâche, `dagrun_timeout` de 3 heures. Les trois contrôles qualité ont `retries=0` : une erreur de données est déterministe, la relancer retarderait seulement l'alerte.
+
 ## Contrôles qualité (`pipeline/quality.py`)
 
 Trois points de contrôle dans le traitement 2026 (tâches du DAG et de `run_2026.py`). L'historique est contrôlé avec les mêmes règles dans `main.py`, **année par année** (relevés 2022, 2023, 2024, 2025 puis profils d'apprentissage de chaque année, avec l'évolution par rapport à l'année précédente) ; un échec bloquant arrête l'entraînement.

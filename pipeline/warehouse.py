@@ -56,6 +56,7 @@ from config.config import (
 from pipeline.lake import read_gold
 
 SCHEMA_FILE = Path(__file__).resolve().parent / "sql" / "schema.sql"
+MONITORING_FILE = Path(__file__).resolve().parent / "sql" / "monitoring.sql"
 RESEAU_IDS = {"electricite": 1, "eau": 2}
 MEASURES = ["CONSO_TOTALE", "CONSO_MOYENNE", "CONSO_MAX", "CONSO_MIN"]
 
@@ -81,8 +82,9 @@ def connect():
 
 
 def create_schema(cursor):
-    """Crée les tables et les vues si elles n'existent pas."""
+    """Crée les tables et les vues (entrepôt + suivi) si elles n'existent pas."""
     cursor.execute(SCHEMA_FILE.read_text(encoding="utf-8"))
+    cursor.execute(MONITORING_FILE.read_text(encoding="utf-8"))
 
 
 def ensure_schema(cursor):

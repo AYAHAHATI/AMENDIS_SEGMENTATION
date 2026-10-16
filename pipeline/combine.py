@@ -168,6 +168,7 @@ def main():
             "Export Power BI non réalisé : traiter d'abord les deux réseaux."
         )
     export_legacy(data)
+    return data
 
 
 if __name__ == "__main__":

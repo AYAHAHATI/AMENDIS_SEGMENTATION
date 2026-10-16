@@ -69,3 +69,27 @@ SELECT j.date_chargement, r.libelle AS reseau, j.nb_contrats, j.nb_profils,
        j.nb_predictions, j.duree_secondes
 FROM journal_chargements j JOIN dim_reseau r ON r.reseau_id = j.reseau_id
 ORDER BY j.date_chargement DESC;
+
+
+-- ==========================================================================
+-- SUIVI DES EXÉCUTIONS (pipeline/monitoring.py)
+-- ==========================================================================
+
+-- 7. Santé des dernières exécutions
+SELECT run_id, debut, ROUND(duree_secondes::numeric, 1) AS duree_s, etapes,
+       etapes_en_echec, etapes_relancees, avertissements_qualite, statut
+FROM v_sante_pipeline ORDER BY debut DESC LIMIT 10;
+
+
+-- 8. Durée moyenne et maximale de chaque étape (repérer les étapes qui ralentissent)
+SELECT etape, COALESCE(reseau, '-') AS reseau, COUNT(*) AS executions,
+       ROUND(AVG(duree_secondes)::numeric, 1) AS duree_moy_s,
+       ROUND(MAX(duree_secondes)::numeric, 1) AS duree_max_s
+FROM suivi_executions WHERE statut = 'succes'
+GROUP BY etape, reseau ORDER BY duree_moy_s DESC;
+
+
+-- 9. Contrôles qualité en échec ou en avertissement, par exécution
+SELECT run_id, etape, reseau, controle, severite, valeur
+FROM controles_qualite WHERE statut = 'ECHEC'
+ORDER BY date_execution DESC;
